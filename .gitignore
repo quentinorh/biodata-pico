@@ -1,0 +1,7 @@
+# Dépendances et caches
+**/node_modules/
+**/__pycache__/
+*.pyc
+
+# Clones et outils tiers : chacun a son propre dépôt, ou ne sert qu'à compiler.
+tools/_vendor/

@@ -1,0 +1,21 @@
+Ref,Qty,Value,MPN,Manufacturer,Mouser_PN,Description,Mouser_URL,Statut,Notes
+U1,1,LMC555,LMC555CN/NOPB,Texas Instruments,,Timer CMOS DIP-8,https://www.mouser.fr/c/?q=LMC555CN%2FNOPB,carte,Soude. Equivalent : TLC555CP.
+R1,1,100 kOhm,RNMF14FTC100K,Stackpole,,Axiale 1 % 0.25 W,https://www.mouser.fr/c/?q=RNMF14FTC100K,carte,RA : 3V3 vers DISCH
+R2,1,470 Ohm,RNMF14FTC470R,Stackpole,,Axiale 1 % 0.25 W,https://www.mouser.fr/c/?q=RNMF14FTC470R,carte,Serie OUT vers GP15
+R3,1,470 Ohm,RNMF14FTC470R,Stackpole,,Axiale 1 % 0.25 W,https://www.mouser.fr/c/?q=RNMF14FTC470R,carte,Serie OUT vers D1
+C1,1,4.7 nF,FG18C0G1H472JNT06,TDK,810-FG18C0G1H472JNT6,C0G 50 V radial pas 2.5 mm,https://www.mouser.fr/c/?q=810-FG18C0G1H472JNT6,carte,Timing. Ne pas remplacer par un X7R Z5U ou Y5V.
+C2,1,47 uF,ECE-A1EKA470,Panasonic,667-ECE-A1EKA470,Alu radial 25 V 6.3 x 7 mm pas 2.5 mm,https://www.mouser.fr/c/?q=667-ECE-A1EKA470,carte,Polarise : plus vers 3V3. Equivalent plus haut : EEU-HD1E470.
+C3,1,100 nF,C315C104K5R5TA,KEMET,,X7R 50 V radial,https://www.mouser.fr/c/?q=C315C104K5R5TA,carte,Decouplage HF. Pas le Z5U C315C104M5U5TA.
+C4,1,10 nF,FG14C0G2A103JNT06,TDK,810-FG14C0G2A103JNT6,C0G 100 V radial pas 2.5 mm,https://www.mouser.fr/c/?q=810-FG14C0G2A103JNT6,carte,CONT vers GND. FG28C0G1H103JNT06 est en pas 5 mm.
+D1,1,LED verte,LTL-1CHGE,Lite-On,,LED 3.1 mm Vf typ. 2.1 V,https://www.mouser.fr/c/?q=LTL-1CHGE,carte,Anode cote R3 cathode vers GND. Equivalent jaune : LTL-1CHYE.
+J1,1,Bornier 2 plots,TAD05-02-1-L-G,GCT,640-TAD05-02-1-L-G,Vis 3.5 mm entree laterale,https://www.mouser.fr/c/?q=640-TAD05-02-1-L-G,carte,Pin 1 = prob_A (TRIG/THRES). Pin 2 = prob_B (DISCH).
+J2,1,Socket 1x20,SSK02-FPH-254-A20,Same Sky,179-SSK02FPH254A20,Support femelle 2.54 mm,https://www.mouser.fr/c/?q=179-SSK02FPH254A20,carte,Broches Pico 1 a 20. Equivalent : Samtec SSW-120-01-T-S.
+J3,1,Socket 1x20,SSK02-FPH-254-A20,Same Sky,179-SSK02FPH254A20,Support femelle 2.54 mm,https://www.mouser.fr/c/?q=179-SSK02FPH254A20,carte,Broches Pico 21 a 40. Entraxe des rangees : 17.78 mm.
+A1,1,Pico 2 W,SC1634,Raspberry Pi,358-SC1634,Pico 2 W avec headers males 2.54 mm,https://www.mouser.fr/c/?q=SC1634,carte,Enfiche dans J2/J3. Sans headers : SC1633 (358-SC1633).
+CAL10K,1,10 kOhm,RNMF14FTC10K0,Stackpole,,Axiale 1 % 0.25 W,https://www.mouser.fr/c/?q=RNMF14FTC10K0,optionnel,Calibration non soudee serree sur J1
+CAL22K,1,22 kOhm,RNMF14FTC22K0,Stackpole,,Axiale 1 % 0.25 W,https://www.mouser.fr/c/?q=RNMF14FTC22K0,optionnel,Calibration non soudee serree sur J1
+CAL47K,1,47 kOhm,RNMF14FTC47K0,Stackpole,,Axiale 1 % 0.25 W,https://www.mouser.fr/c/?q=RNMF14FTC47K0,optionnel,Calibration non soudee serree sur J1
+CAL100K,1,100 kOhm,RNMF14FTC100K,Stackpole,,Axiale 1 % 0.25 W,https://www.mouser.fr/c/?q=RNMF14FTC100K,optionnel,Meme MPN que R1. En commander 2 au total si on calibre.
+CAL220K,1,220 kOhm,RNMF14FTC220K,Stackpole,,Axiale 1 % 0.25 W,https://www.mouser.fr/c/?q=RNMF14FTC220K,optionnel,Calibration non soudee serree sur J1
+CAL470K,1,470 kOhm,RNMF14FTC470K,Stackpole,,Axiale 1 % 0.25 W,https://www.mouser.fr/c/?q=RNMF14FTC470K,optionnel,Calibration non soudee serree sur J1
+CAL1M,1,1 MOhm,RNMF14FTC1M00,Stackpole,,Axiale 1 % 0.25 W,https://www.mouser.fr/c/?q=RNMF14FTC1M00,optionnel,Calibration non soudee serree sur J1

@@ -2,7 +2,7 @@
 
 Musique générée à partir des microvariations électriques d’une plante.
 
-Un capteur de type [MIDI Sprout](https://github.com/electricityforprogress/MIDIsprout) mesure la conductivité à la surface d’une feuille et produit un train d’impulsions. Un Raspberry Pi Pico 2 W compte la période de chaque impulsion, ouvre un point d’accès Wi-Fi et sert une interface web. Le navigateur du téléphone dessine le signal et le transforme en son avec des instruments [Faust](https://faust.grame.fr) issus d’[Ambient Garden](https://ambient.garden).
+L’électronique du capteur est basée sur le [MIDI Sprout](https://github.com/electricityforprogress/MIDIsprout) de Sam Cusumano. Elle mesure la conductivité à la surface d’une feuille et produit un train d’impulsions. Un Raspberry Pi Pico 2 W compte la période de chaque impulsion, ouvre un point d’accès Wi-Fi et sert une interface web. Le navigateur du téléphone dessine le signal et le transforme en son avec des instruments [Faust](https://faust.grame.fr) issus d’[Ambient Garden](https://ambient.garden).
 
 Réalisé par [Quentin Orhant](https://quentino.io) pour l’association [CC Lab](https://climatechangelab.org).
 
@@ -50,7 +50,8 @@ Les jeux de réglages (instruments, volumes, seuils, BPM) peuvent être enregist
 ## Matériel
 
 - Raspberry Pi Pico **2 W**, firmware MicroPython `RPI_PICO2_W`. Le Pico W d’origine n’a pas assez de flash pour l’interface et les 18 patches.
-- Sortie impulsionnelle du capteur (555 / comparateur du MIDI Sprout) sur **GP15**, broche physique 20. L’entrée est en pull-down.
+- Carte capteur V1 : oscillateur **LMC555** en 3,3 V, inspiré du MIDI Sprout. Schéma, synthèse et nomenclature dans `pcb/` (`synthese-pcb-v1.md`, `BOM-v1-mouser.csv`).
+- Sortie du 555 sur **GP15**, broche physique 20. Le pull-down est celui du Pico (firmware), pas une résistance sur la carte.
 - Un téléphone ou un ordinateur pour le son : la synthèse tourne dans le navigateur, pas sur le Pico.
 
 ## Utilisation
@@ -74,7 +75,15 @@ L’interface est alors sur `http://localhost:8080`.
 
 ## Déployer sur le Pico
 
-Le Pico doit être branché en USB, avec `mpremote` installé (`pip install mpremote`). Le script compresse l’interface, copie `main.py` et `config.py`, puis redémarre la carte. Les sources `.dsp` restent sur le PC : seuls les WASM et le catalogue partent sur la flash.
+L’interpréteur MicroPython s’installe une fois, à la main. `tools/deploy.py` copie ensuite le programme et l’interface ; il ne remplace pas cet interpréteur.
+
+1. Télécharger le firmware du **Pico 2 W**, variante `RPI_PICO2_W` : [RPI_PICO2_W-latest.uf2](https://micropython.org/download/RPI_PICO2_W/RPI_PICO2_W-latest.uf2) ([autres versions](https://micropython.org/download/RPI_PICO2_W/)). C’est la build pour la puce RP2350 et le Wi-Fi de cette carte.
+2. Maintenir le bouton **BOOTSEL** en branchant le câble USB. Un disque nommé **RP2350** apparaît.
+3. Copier le `.uf2` sur ce disque. La carte redémarre sous MicroPython et le disque disparaît.
+
+Pour changer de version plus tard, la même séquence suffit. Si MicroPython tourne déjà, `machine.bootloader()` au REPL ouvre aussi ce disque.
+
+Le Pico doit ensuite être branché en USB, avec `mpremote` installé (`pip install mpremote`). Le script compresse l’interface, copie `main.py` et `config.py`, puis redémarre la carte. Les sources `.dsp` restent sur le PC : seuls les WASM et le catalogue partent sur la flash.
 
 ```bash
 python tools/deploy.py
@@ -89,12 +98,14 @@ Si LittleFS est plein, le script reformate le système de fichiers. Il relit `se
 ```
 pico_firmware/     MicroPython : mesure PIO, point d'accès, HTTP, DNS captif
 app/               Interface web, graphe, sonification, patches Faust
+pcb/               Carte capteur V1 : schéma KiCad, synthèse, nomenclature
 tools/deploy.py    Copie firmware + interface gzippée sur le Pico 2 W
 tools/dev_server.py  Simulateur de l'API, sans matériel
 ```
 
 ## Dépendances
 
+- [MIDI Sprout](https://github.com/electricityforprogress/MIDIsprout) — électronique du capteur, Sam Cusumano
 - [Ambient Garden](https://ambient.garden) — instruments Faust du paysage sonore
 - [Teasynth](https://github.com/pac-dev/Teasynth) — lecture de ces patches dans le navigateur
 - [Faust](https://faust.grame.fr) — langage de synthèse, GRAME

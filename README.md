@@ -1,4 +1,4 @@
-# Biodata Pico - RPI PICO SYLVESTRE ORCHESTRE
+# RPI PICO SYLVESTRE ORCHESTRE
 
 Musique générée à partir des microvariations électriques d’une plante.
 

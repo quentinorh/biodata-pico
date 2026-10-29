@@ -1,4 +1,4 @@
-# Biodata Pico
+# Biodata Pico - RPI PICO SYLVESTRE ORCHESTRE
 
 Musique générée à partir des microvariations électriques d’une plante.
 
@@ -18,7 +18,7 @@ Le capteur oscille autour de 50 Hz, soit une période d’environ 20 000 µs. Pl
 
 Une machine d’état PIO (`pulse_period` dans `pico_firmware/main.py`) compte la durée d’un cycle complet du signal, front montant à front montant. Elle tourne à 3 MHz et consomme trois cycles par pas, ce qui donne une résolution de 1 µs.
 
-Chaque mesure est convertie en microsecondes et rangée dans un anneau en RAM (512 valeurs). Les périodes hors de la fenêtre 100 µs – 250 000 µs sont écartées : ce sont des parasites de commutation, pas le signal de la plante. La LED du Pico clignote d’autant plus vite que les impulsions arrivent.
+Chaque mesure est convertie en microsecondes. Les périodes hors de la fenêtre 100 µs – 250 000 µs sont écartées : ce sont des parasites de commutation, pas le signal de la plante. La LED du Pico clignote d’autant plus vite que les impulsions arrivent.
 
 ### Réseau et interface
 
@@ -26,11 +26,11 @@ Au démarrage, le Pico ouvre le point d’accès **Plante-Musicale** (réseau ou
 
 L’interface est une page statique (`app/`) plus quelques routes :
 
-| Route | Rôle |
-| --- | --- |
-| `/api/stream` | Flux Server-Sent Events des périodes (`intervals_us`, en µs) |
-| `/api/data` | Même contenu, en une seule réponse JSON |
-| `/api/status` | SSID, adresse, broche du capteur, dernière période, RAM libre |
+| Route             | Rôle                                                               |
+| ----------------- | ------------------------------------------------------------------- |
+| `/api/stream`   | Flux Server-Sent Events des périodes (`intervals_us`, en µs)    |
+| `/api/data`     | Même contenu, en une seule réponse JSON                           |
+| `/api/status`   | SSID, adresse, broche du capteur, dernière période, RAM libre     |
 | `/api/settings` | Bibliothèque de jeux de réglages, stockée dans `settings.json` |
 
 Les fichiers de l’interface sont déposés en gzip sur le Pico et servis avec `Content-Encoding: gzip`. La bibliothèque de réglages reste à la racine du système de fichiers, en dehors du dossier `app`, pour survivre à un redéploiement.
@@ -56,7 +56,7 @@ Les jeux de réglages (instruments, volumes, seuils, BPM) peuvent être enregist
 
 ## Utilisation
 
-1. Brancher le capteur sur GP15, les électrodes sur la feuille, puis alimenter le Pico.
+1. Assembler le PCB et le Raspberry pi Pico, les électrodes sur la feuille, puis alimenter le Pico.
 2. Rejoindre le Wi-Fi **Plante-Musicale**.
 3. Ouvrir `http://192.168.4.1` (le portail captif y mène souvent tout seul).
 4. Autoriser le son, puis régler les trois pistes depuis le panneau.

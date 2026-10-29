@@ -1,0 +1,65 @@
+MIT License
+
+Copyright (c) 2026 Quentin Orhant
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Périmètre
+
+Cette licence couvre le travail original de ce dépôt : le firmware
+MicroPython (pico_firmware/), l'interface web (app/, hors app/faust/),
+les outils (tools/) et les fichiers de conception de la carte capteur
+(pcb/ : schéma, circuit imprimé, nomenclature). Les mêmes conditions
+s'appliquent à ces fichiers matériels : usage, copie, modification et
+distribution, y compris commerciale, à condition de conserver le présent
+avis.
+
+Le projet a été réalisé par Quentin Orhant pour l'association CC Lab.
+À défaut de cession de droits, le titulaire indiqué ci-dessus est l'auteur.
+
+Composants tiers
+
+Le texte qui précède ne relicencie pas les éléments suivants. Ils restent
+soumis à leurs propres conditions, et l'attribution d'origine doit être
+conservée.
+
+- app/faust/ — sources d'instruments Faust et lecteurs générés, issus
+  d'Ambient Garden et du moteur Teasynth (pac-dev) :
+  https://github.com/pac-dev/AmbientGarden
+  https://github.com/pac-dev/Teasynth
+  Ces dépôts ne publient pas de fichier de licence. Les fichiers sont
+  inclus avec attribution et ne sont pas couverts par la cession MIT
+  ci-dessus. Toute redistribution de ce dossier suppose l'autorisation
+  de leur auteur.
+
+- Le circuit du capteur s'inspire du MIDI Sprout de Sam Cusumano,
+  publié sous licence MIT :
+  https://github.com/electricityforprogress/MIDIsprout
+  Les fichiers de ce dépôt n'y sont pas copiés.
+
+- Les bibliothèques Faust (GRAME) utilisées pour compiler les instruments
+  sont sous LGPL-2.1 ou ultérieure, avec une exception qui permet de
+  distribuer le code compilé sous la licence choisie pour ce projet.
+  Le compilateur Faust et les sources de ces bibliothèques ne sont pas
+  inclus ici.
+
+- MicroPython, interpréteur du Pico, est sous licence MIT. Il n'est pas
+  inclus dans ce dépôt.

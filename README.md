@@ -6,6 +6,8 @@ L’électronique du capteur est basée sur le [MIDI Sprout](https://github.com/
 
 Réalisé par [Quentin Orhant](https://quentino.io) pour l’association [CC Lab](https://climatechangelab.org).
 
+![Capteur branché sur une plante, signal affiché sur le téléphone](pics/000.png)
+
 ## Fonctionnement
 
 ```

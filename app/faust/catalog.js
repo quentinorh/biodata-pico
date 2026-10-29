@@ -19,8 +19,8 @@ window.FAUST_CATALOG = {
         {
           "id": "freq1",
           "label": "Fréquence 1",
-          "min": 20,
-          "max": 300,
+          "min": 25,
+          "max": 220,
           "def": 50,
           "freq": true
         },
@@ -79,7 +79,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 25,
-          "max": 600,
+          "max": 400,
           "def": 100,
           "freq": true
         }
@@ -107,7 +107,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 100,
-          "max": 2400,
+          "max": 1600,
           "def": 400,
           "freq": true
         },
@@ -115,7 +115,7 @@ window.FAUST_CATALOG = {
           "id": "freq2",
           "label": "Fréquence 2",
           "min": 150,
-          "max": 3600,
+          "max": 2000,
           "def": 600,
           "freq": true
         },
@@ -183,7 +183,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 200,
-          "max": 4800,
+          "max": 3200,
           "def": 800,
           "freq": true
         },
@@ -191,7 +191,7 @@ window.FAUST_CATALOG = {
           "id": "freq2",
           "label": "Fréquence 2",
           "min": 225,
-          "max": 5400,
+          "max": 3600,
           "def": 900,
           "freq": true
         },
@@ -259,7 +259,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 200,
-          "max": 4800,
+          "max": 3200,
           "def": 800,
           "freq": true
         },
@@ -267,7 +267,7 @@ window.FAUST_CATALOG = {
           "id": "freq2",
           "label": "Fréquence 2",
           "min": 225,
-          "max": 5400,
+          "max": 3600,
           "def": 900,
           "freq": true
         },
@@ -336,7 +336,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 200,
-          "max": 4800,
+          "max": 3200,
           "def": 800,
           "freq": true
         },
@@ -344,7 +344,7 @@ window.FAUST_CATALOG = {
           "id": "freq2",
           "label": "Fréquence 2",
           "min": 160,
-          "max": 3840,
+          "max": 2560,
           "def": 640,
           "freq": true
         },
@@ -472,7 +472,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 25,
-          "max": 600,
+          "max": 400,
           "def": 100,
           "freq": true
         },
@@ -480,15 +480,15 @@ window.FAUST_CATALOG = {
           "id": "freq2",
           "label": "Fréquence 2",
           "min": 43.75,
-          "max": 1050,
+          "max": 700,
           "def": 175,
           "freq": true
         },
         {
           "id": "freq3",
           "label": "Fréquence 3",
-          "min": 20,
-          "max": 300,
+          "min": 25,
+          "max": 200,
           "def": 50,
           "freq": true
         }
@@ -515,7 +515,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 100,
-          "max": 2400,
+          "max": 1600,
           "def": 400,
           "freq": true
         },
@@ -523,7 +523,7 @@ window.FAUST_CATALOG = {
           "id": "freq2",
           "label": "Fréquence 2",
           "min": 150,
-          "max": 3600,
+          "max": 2400,
           "def": 600,
           "freq": true
         }
@@ -551,7 +551,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 100,
-          "max": 2400,
+          "max": 1600,
           "def": 400,
           "freq": true
         },
@@ -559,7 +559,7 @@ window.FAUST_CATALOG = {
           "id": "freq2",
           "label": "Fréquence 2",
           "min": 150,
-          "max": 3600,
+          "max": 2400,
           "def": 600,
           "freq": true
         },
@@ -610,7 +610,7 @@ window.FAUST_CATALOG = {
         {
           "id": "freq1",
           "label": "Fréquence 1",
-          "min": 50,
+          "min": 60,
           "max": 1200,
           "def": 200,
           "freq": true
@@ -618,8 +618,8 @@ window.FAUST_CATALOG = {
         {
           "id": "freq2",
           "label": "Fréquence 2",
-          "min": 75,
-          "max": 1800,
+          "min": 80,
+          "max": 1600,
           "def": 300,
           "freq": true
         },
@@ -663,7 +663,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 75,
-          "max": 1800,
+          "max": 1200,
           "def": 300,
           "freq": true
         }
@@ -698,16 +698,16 @@ window.FAUST_CATALOG = {
         {
           "id": "freq1",
           "label": "Fréquence 1",
-          "min": 75,
-          "max": 1800,
+          "min": 80,
+          "max": 1500,
           "def": 300,
           "freq": true
         },
         {
           "id": "freq2",
           "label": "Fréquence 2",
-          "min": 87.5,
-          "max": 2100,
+          "min": 90,
+          "max": 1750,
           "def": 350,
           "freq": true
         }
@@ -742,16 +742,16 @@ window.FAUST_CATALOG = {
         {
           "id": "freq1",
           "label": "Fréquence 1",
-          "min": 20,
-          "max": 480,
+          "min": 30,
+          "max": 260,
           "def": 80,
           "freq": true
         },
         {
           "id": "freq2",
           "label": "Fréquence 2",
-          "min": 25,
-          "max": 600,
+          "min": 35,
+          "max": 280,
           "def": 100,
           "freq": true
         }
@@ -779,7 +779,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 100,
-          "max": 2400,
+          "max": 1600,
           "def": 400,
           "freq": true
         },
@@ -823,7 +823,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 150,
-          "max": 3600,
+          "max": 1800,
           "def": 600,
           "freq": true
         },
@@ -831,7 +831,7 @@ window.FAUST_CATALOG = {
           "id": "freq2",
           "label": "Fréquence 2",
           "min": 200,
-          "max": 4800,
+          "max": 2000,
           "def": 800,
           "freq": true
         },
@@ -884,7 +884,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 150,
-          "max": 3600,
+          "max": 1800,
           "def": 600,
           "freq": true
         },
@@ -892,7 +892,7 @@ window.FAUST_CATALOG = {
           "id": "freq2",
           "label": "Fréquence 2",
           "min": 200,
-          "max": 4800,
+          "max": 2000,
           "def": 800,
           "freq": true
         },
@@ -946,7 +946,7 @@ window.FAUST_CATALOG = {
           "id": "freq1",
           "label": "Fréquence 1",
           "min": 200,
-          "max": 4800,
+          "max": 3200,
           "def": 800,
           "freq": true
         },
@@ -954,7 +954,7 @@ window.FAUST_CATALOG = {
           "id": "freq2",
           "label": "Fréquence 2",
           "min": 160,
-          "max": 3840,
+          "max": 2560,
           "def": 640,
           "freq": true
         },

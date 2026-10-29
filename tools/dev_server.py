@@ -1,7 +1,7 @@
 """Simulateur de l'API du Pico, pour travailler l'interface sans matériel.
 
-Sert le dossier ``app`` et reproduit ``/api/stream``, ``/api/data`` et
-``/api/status`` avec un signal biodata synthétique à 50 Hz.
+Sert le dossier ``app`` et reproduit ``/api/stream``, ``/api/data``,
+``/api/status`` et ``/api/settings`` avec un signal biodata synthétique à 50 Hz.
 
     python tools/dev_server.py        puis http://localhost:8080
 """
@@ -75,6 +75,89 @@ class FakeSensor:
 
 
 sensor = FakeSensor()
+settings_lock = threading.Lock()
+SETTINGS_MAX_BYTES = 96 * 1024
+SETTINGS_MAX_PRESETS = 24
+settings_library = {"v": 1, "active": "", "next": 1, "presets": []}
+
+
+def _valid_preset_id(value):
+    return isinstance(value, str) and value.isdigit() and 1 <= len(value) <= 8
+
+
+def _preset_title(raw):
+    if not isinstance(raw, str):
+        return "Sans titre"
+    text = raw.strip()
+    return text[:80] if text else "Sans titre"
+
+
+def _library_summary(library):
+    items = []
+    for preset in library.get("presets") or []:
+        if not isinstance(preset, dict) or not _valid_preset_id(str(preset.get("id", ""))):
+            continue
+        items.append({"id": str(preset["id"]), "title": preset.get("title") or "Sans titre"})
+    return {"active": library.get("active") or "", "presets": items}
+
+
+def _save_preset(parsed):
+    if not isinstance(parsed, dict) or parsed.get("app") != "plante-musicale":
+        return "invalid", "", None
+    title = _preset_title(parsed.get("title"))
+    parsed = dict(parsed)
+    parsed["title"] = title
+    wanted = parsed.pop("id", None)
+    if not isinstance(wanted, str):
+        wanted = None
+    with settings_lock:
+        library = settings_library
+        presets = library.setdefault("presets", [])
+        found = None
+        if _valid_preset_id(wanted):
+            for preset in presets:
+                if str(preset.get("id")) == wanted:
+                    found = preset
+                    break
+        if found is None:
+            if len(presets) >= SETTINGS_MAX_PRESETS:
+                return "full", "", None
+            next_id = int(library.get("next") or 1)
+            preset_id = str(next_id)
+            library["next"] = next_id + 1
+            presets.insert(0, {"id": preset_id, "title": title, "config": parsed})
+        else:
+            preset_id = str(found["id"])
+            found["title"] = title
+            found["config"] = parsed
+        library["active"] = preset_id
+        summary = _library_summary(library)
+    return None, preset_id, summary
+
+
+def _activate_preset(preset_id):
+    if not _valid_preset_id(preset_id):
+        return "invalid", None
+    with settings_lock:
+        known = any(str(preset.get("id")) == preset_id for preset in settings_library.get("presets") or [])
+        if not known:
+            return "missing", _library_summary(settings_library)
+        settings_library["active"] = preset_id
+        return None, _library_summary(settings_library)
+
+
+def _delete_preset(preset_id):
+    if not _valid_preset_id(preset_id):
+        return "invalid", None
+    with settings_lock:
+        presets = settings_library.get("presets") or []
+        kept = [preset for preset in presets if str(preset.get("id")) != preset_id]
+        if len(kept) == len(presets):
+            return "missing", _library_summary(settings_library)
+        settings_library["presets"] = kept
+        if settings_library.get("active") == preset_id:
+            settings_library["active"] = ""
+        return None, _library_summary(settings_library)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -127,12 +210,114 @@ class Handler(SimpleHTTPRequestHandler):
                     "free_ram": 123456,
                 }
             )
+        elif path == "/api/settings":
+            self._send_settings()
         else:
             if path.endswith(".wasm"):
                 self.extensions_map[".wasm"] = "application/wasm"
             elif path.endswith(".dsp"):
                 self.extensions_map[".dsp"] = "text/plain"
+            elif path.endswith(".webmanifest"):
+                self.extensions_map[".webmanifest"] = "application/manifest+json"
             super().do_GET()
+
+    def _query_id(self):
+        if "?" not in self.path:
+            return ""
+        for item in self.path.split("?", 1)[1].split("&"):
+            if item.startswith("id="):
+                return item.split("=", 1)[1]
+        return ""
+
+    def _send_settings(self):
+        preset_id = self._query_id()
+        with settings_lock:
+            if preset_id:
+                stored = None
+                for preset in settings_library.get("presets") or []:
+                    if str(preset.get("id")) == preset_id:
+                        stored = preset.get("config")
+                        break
+            else:
+                stored = _library_summary(settings_library)
+        if preset_id and not _valid_preset_id(preset_id):
+            self.send_error(400)
+            return
+        if preset_id and stored is None:
+            payload = b'{"saved":false}'
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        self._json(stored)
+
+    def do_POST(self):
+        path = self.path.split("?", 1)[0]
+        if path != "/api/settings":
+            self.send_error(405)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "-1"))
+        except ValueError:
+            length = -1
+        if length < 0:
+            self.send_error(411)
+            return
+        if length == 0:
+            error, summary = _activate_preset(self._query_id())
+            if error == "invalid":
+                self.send_error(400)
+                return
+            if error == "missing":
+                self.send_error(404)
+                return
+            self._json(summary)
+            return
+        if length > SETTINGS_MAX_BYTES:
+            self.send_error(413)
+            return
+        raw = self.rfile.read(length)
+        try:
+            parsed = json.loads(raw.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            self.send_error(400)
+            return
+        error, preset_id, summary = _save_preset(parsed)
+        if error == "invalid":
+            self.send_error(400)
+            return
+        if error == "full":
+            self.send_error(507)
+            return
+        if error:
+            self.send_error(507)
+            return
+        summary["ok"] = True
+        summary["id"] = preset_id
+        self._json(summary)
+
+    def do_DELETE(self):
+        path = self.path.split("?", 1)[0]
+        if path != "/api/settings":
+            self.send_error(405)
+            return
+        error, summary = _delete_preset(self._query_id())
+        if error == "invalid":
+            self.send_error(400)
+            return
+        if error == "missing":
+            payload = json.dumps(summary).encode()
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        self._json(summary)
 
     def _stream(self):
         self.send_response(200)

@@ -108,11 +108,14 @@ const G = {
   zoomSmoothMs: G_SPEC.zoomSmoothMs.def,
   zoneXfadeMs: G_SPEC.zoneXfadeMs.def,
   zoneXfade: true,
+  autoCenter: false,
   autoZoom: false,
 };
 let dynCenter = 20000;
 let lastAdaptTick = 0;
 let zoomHalf = NaN;
+// L'ampleur du zoom est suivie à part : un pic ne recadre pas le graphe d'un coup.
+const ZOOM_FOLLOW_S = 0.6;
 // Historique plus long que le graphe : le lissage doit couvrir jusqu'à 20 s
 // même si l'écran n'en montre qu'une partie, ou si le débit dépasse 50 Hz.
 const MEAN_KEEP_US = 21000 * 1000;
@@ -149,7 +152,7 @@ function formatGeneralVal(key, raw) {
 }
 
 function tickViewAdaptation() {
-  if (!G.autoZoom && !G.dynamicThresholds) {
+  if (!G.autoCenter && !G.autoZoom && !G.dynamicThresholds) {
     lastAdaptTick = 0;
     return false;
   }
@@ -159,23 +162,29 @@ function tickViewAdaptation() {
   lastAdaptTick = now;
   let changed = false;
 
-  if (G.autoZoom) {
-    const [targetMin, targetMax] = autoZoomTarget();
-    const targetCenter = (targetMin + targetMax) / 2;
-    const targetHalf = Math.max((targetMax - targetMin) / 2, MIN_ZOOM_RANGE / 2);
-    if (!isViewReady() || !Number.isFinite(zoomHalf)) {
-      zoomHalf = targetHalf;
-      globalMin = Math.round(targetCenter - zoomHalf);
-      globalMax = Math.round(targetCenter + zoomHalf);
-      changed = true;
+  if ((G.autoCenter || G.autoZoom) && !pinch) {
+    const targetCenter = (G.autoCenter || !isViewReady())
+      ? autoCenterValue()
+      : (globalMin + globalMax) / 2;
+    const needSnap = !isViewReady() || (G.autoZoom && !Number.isFinite(zoomHalf));
+    if (needSnap || !Number.isFinite(targetCenter)) {
+      if (Number.isFinite(targetCenter)) {
+        const half = frameHalf(targetCenter);
+        if (G.autoZoom) zoomHalf = half;
+        globalMin = Math.round(targetCenter - half);
+        globalMax = Math.round(targetCenter + half);
+        changed = true;
+      }
     } else {
-      // Le centre est déjà la moyenne. Seule l'ampleur du zoom est suivie,
-      // sinon un pic recadre le graphe en une fraction de seconde.
-      const tau = Math.max(G.zoomSmoothMs / 1000, 0.08);
-      const coeff = 1 - Math.exp(-dt / tau);
-      zoomHalf += (targetHalf - zoomHalf) * coeff;
-      const nextMin = targetCenter - zoomHalf;
-      const nextMax = targetCenter + zoomHalf;
+      let half = (globalMax - globalMin) / 2;
+      if (G.autoZoom) {
+        const targetHalf = autoZoomHalf(targetCenter);
+        const coeff = 1 - Math.exp(-dt / ZOOM_FOLLOW_S);
+        zoomHalf += (targetHalf - zoomHalf) * coeff;
+        half = zoomHalf;
+      }
+      const nextMin = targetCenter - half;
+      const nextMax = targetCenter + half;
       if (Math.abs(nextMin - globalMin) >= 0.5 || Math.abs(nextMax - globalMax) >= 0.5) {
         globalMin = Math.round(nextMin);
         globalMax = Math.round(nextMax);
@@ -210,11 +219,12 @@ let graphAnimations = true;
 let graphAnimFromConfig = false;
 let dragging = null; // "hi" | "lo" | null
 let panning = false;
+let pinch = null;
 let panLastY = 0;
 const DRAG_SNAP_PX = 12;
 let currentZone = "vegetal"; // "vegetal" | "interaction"
 let zoneHoldUntil = 0;
-let smoothedZone = 0; // 0 = végétal, 1 = toucher (fondu)
+let smoothedZone = 0; // 0 = végétal seul, 1 = toucher par-dessus
 let lastPulseAt = 0;
 let signalGain = 0; // 1 = impulsions récentes, 0 = silence
 let viewFitted = false;
@@ -272,19 +282,44 @@ function recentMean(windowMs) {
   return n ? sum / n : NaN;
 }
 
-/** Zoom = min/max de toute la fenêtre + marge ; centre = moyenne des X dernières secondes. */
-function autoZoomTarget() {
+/** Centre visé par le centrage auto : moyenne des X dernières secondes. */
+function autoCenterValue() {
+  const mean = recentMean(G.zoomSmoothMs);
+  if (Number.isFinite(mean)) return mean;
+  const [lo, hi] = visibleMinMax();
+  return (lo + hi) / 2;
+}
+
+/** Demi-plage qui contient les données visibles autour de `center`, plus la marge. */
+function autoZoomHalf(center) {
   const [lo, hi] = visibleMinMax();
   let dataSpan = hi - lo;
   if (!Number.isFinite(dataSpan) || dataSpan < 1) dataSpan = MIN_ZOOM_RANGE;
   const pad = Math.max(dataSpan * (G.zoomMarginPct / 100), 2);
-  let center = recentMean(G.zoomSmoothMs);
-  if (!Number.isFinite(center)) center = (lo + hi) / 2;
-  // La plage suit toutes les données visibles : on élargit si le centre n'est pas au milieu.
   let half = Math.max(center - lo, hi - center) + pad;
   if (half * 2 < MIN_ZOOM_RANGE) half = MIN_ZOOM_RANGE / 2;
   if (half * 2 > MAX_ZOOM_RANGE) half = MAX_ZOOM_RANGE / 2;
-  return [center - half, center + half];
+  return half;
+}
+
+function frameHalf(center) {
+  if (G.autoZoom) return autoZoomHalf(center);
+  if (isViewReady()) return (globalMax - globalMin) / 2;
+  return autoZoomHalf(center);
+}
+
+function snapAutoFrame() {
+  if (history.length < 2) return;
+  const center = G.autoCenter || !isViewReady()
+    ? autoCenterValue()
+    : (globalMin + globalMax) / 2;
+  if (!Number.isFinite(center)) return;
+  const half = frameHalf(center);
+  if (G.autoZoom) zoomHalf = half;
+  globalMin = Math.round(center - half);
+  globalMax = Math.round(center + half);
+  viewFitted = true;
+  needStatsFlush = true;
 }
 
 /** Colle l'échelle Y aux impulsions visibles, sur toute la hauteur du canevas. */
@@ -309,6 +344,7 @@ function recenterView() {
   }
   const [lo, hi] = visibleMinMax();
   fitVerticalView(lo, hi);
+  if (G.autoZoom) zoomHalf = (globalMax - globalMin) / 2;
   if (!G.dynamicThresholds) {
     const range = viewRange();
     threshLo = Math.round(globalMin + range / 3);
@@ -591,6 +627,8 @@ const ROUTING_KEY = "plante-mix-v2";
 const CONFIG_KEY = "plante-config-v3";
 const CONFIG_COOKIE = "plantecfg";
 const CONFIG_VERSION = 4;
+const SETTINGS_URL = "/api/settings";
+const TITLE_MAX = 80;
 const ROLE_VOL = { ambiance: "ambientVol", vegetal: "vegetalVol", interaction: "interVol" };
 const ROLE_IDS = ["ambiance", "vegetal", "interaction"];
 
@@ -612,6 +650,7 @@ const defaultRouting = () => ({
 });
 
 let routing = defaultRouting();
+let configTitle = "";
 let uiRole = "vegetal";
 let audioEnabled = false;
 let ambMean = 20000;
@@ -714,8 +753,13 @@ function routingFromParsed(parsed) {
   return next;
 }
 
+function sanitizeTitle(value) {
+  return String(value || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, TITLE_MAX);
+}
+
 function applyConfigObject(parsed, opts) {
   if (!parsed || typeof parsed !== "object") return false;
+  configTitle = typeof parsed.title === "string" ? sanitizeTitle(parsed.title) : "";
   if (Number.isFinite(parsed.modSmooth)) legacyModSmooth = migrateModSmooth(parsed.modSmooth);
   if (Number.isFinite(parsed.modAmount)) legacyModAmount = clamp(parsed.modAmount, 0, 100);
   applyMixPatch(parsed.mix || parsed);
@@ -746,8 +790,19 @@ function applyConfigObject(parsed, opts) {
     }
     if (typeof general.zoneXfade === "boolean") G.zoneXfade = general.zoneXfade;
     if (typeof general.autoZoom === "boolean") G.autoZoom = general.autoZoom;
+    if (typeof general.autoCenter === "boolean") G.autoCenter = general.autoCenter;
+    else if (typeof general.autoZoom === "boolean") G.autoCenter = general.autoZoom;
   }
-  if (parsed.display && typeof parsed.display.autoZoom === "boolean") G.autoZoom = parsed.display.autoZoom;
+  const display = parsed.display && typeof parsed.display === "object" ? parsed.display : null;
+  const generalHasZoom = general && typeof general.autoZoom === "boolean";
+  const generalHasCenter = general && typeof general.autoCenter === "boolean";
+  if (display && !generalHasZoom && typeof display.autoZoom === "boolean") {
+    G.autoZoom = display.autoZoom;
+    if (!generalHasCenter && typeof display.autoCenter !== "boolean") G.autoCenter = display.autoZoom;
+  }
+  if (display && !generalHasCenter && typeof display.autoCenter === "boolean") {
+    G.autoCenter = display.autoCenter;
+  }
   if (G.dynamicThresholds) dynCenter = (threshLo + threshHi) / 2;
   const roleSrc = parsed.roles || ((parsed.ambiance || parsed.vegetal || parsed.interaction) ? parsed : parsed.active);
   if (roleSrc) routing = routingFromParsed(roleSrc);
@@ -894,8 +949,9 @@ function serializeConfig(opts) {
   return {
     version: CONFIG_VERSION,
     app: "plante-musicale",
+    title: configTitle.trim(),
     mix: Object.assign({}, P),
-    display: { graphAnimations: !!graphAnimations, autoZoom: !!G.autoZoom },
+    display: { graphAnimations: !!graphAnimations, autoCenter: !!G.autoCenter, autoZoom: !!G.autoZoom },
     general: {
       dynamicThresholds: !!G.dynamicThresholds,
       threshMarginPct: G.threshMarginPct,
@@ -904,6 +960,7 @@ function serializeConfig(opts) {
       zoomSmoothMs: G.zoomSmoothMs,
       zoneXfadeMs: G.zoneXfadeMs,
       zoneXfade: !!G.zoneXfade,
+      autoCenter: !!G.autoCenter,
       autoZoom: !!G.autoZoom,
     },
     active: ROLE_IDS.reduce((acc, role) => {
@@ -915,12 +972,19 @@ function serializeConfig(opts) {
   };
 }
 
-function persistConfig() {
-  const full = serializeConfig({ complete: false });
+let localRevision = 0;
+let picoPresets = [];
+let activePresetId = "";
+let pendingDeleteId = "";
+let pendingDeleteTimer = null;
+let picoReachable = false;
+
+function writeLocalConfig(full) {
   const fullJson = JSON.stringify(full);
   try { localStorage.setItem(CONFIG_KEY, fullJson); } catch (_) { /* quota */ }
   const cookieJson = JSON.stringify({
     version: CONFIG_VERSION,
+    title: full.title,
     mix: full.mix,
     display: full.display,
     general: full.general,
@@ -941,9 +1005,280 @@ function persistConfig() {
     }, {}),
   });
   if (!writeCookie(CONFIG_COOKIE, cookieJson)) {
-    const compact = JSON.stringify({ version: CONFIG_VERSION, mix: full.mix, active: full.active });
+    const compact = JSON.stringify({
+      version: CONFIG_VERSION,
+      title: full.title,
+      mix: full.mix,
+      active: full.active,
+    });
     if (!writeCookie(CONFIG_COOKIE, compact)) clearCookie(CONFIG_COOKIE);
   }
+}
+
+function setFilesStatus(text, kind) {
+  const el = $("filesStatus");
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove("is-ok", "is-warn", "is-error");
+  if (kind) el.classList.add(kind);
+}
+
+function picoSaveError(err, status, detail) {
+  if (status === 405 || status === 501) {
+    return "Le Pico n'accepte pas encore l'enregistrement. Relancez le déploiement.";
+  }
+  if (status === 507) return detail || "Plus de place sur le Pico.";
+  if (status === 413) return "Réglages trop volumineux pour le Pico.";
+  if (status === 400) return detail || "Le Pico a refusé ces réglages.";
+  if (status) return detail || ("Le Pico a répondu " + status + ".");
+  return "Le Pico a coupé la connexion pendant l'enregistrement.";
+}
+
+function syncTitleInput() {
+  const input = $("cfgTitle");
+  if (!input || document.activeElement === input) return;
+  input.value = configTitle;
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function presetTitle() {
+  const title = configTitle.trim();
+  return title || "Sans titre";
+}
+
+function selectedPreset() {
+  return picoPresets.find((preset) => preset.id === activePresetId) || null;
+}
+
+function saveUpdatesSelection() {
+  const current = selectedPreset();
+  return !!(current && current.title === presetTitle());
+}
+
+function updateSaveLabel() {
+  const btn = $("cfgPicoSave");
+  if (!btn) return;
+  btn.textContent = saveUpdatesSelection() ? "Mettre à jour" : "Enregistrer sur le Pico";
+}
+
+function picoListStatus() {
+  const count = picoPresets.length;
+  if (!count) return ["Aucun réglage sur le Pico", ""];
+  if (activePresetId) return ["Réglage chargé", "is-ok"];
+  return [count === 1 ? "1 réglage sur le Pico" : count + " réglages sur le Pico", ""];
+}
+
+function applyPresetSummary(summary) {
+  const list = Array.isArray(summary && summary.presets) ? summary.presets : [];
+  picoPresets = list.map((preset) => ({
+    id: String(preset && preset.id != null ? preset.id : ""),
+    title: (preset && preset.title) || "Sans titre",
+  })).filter((preset) => preset.id);
+  if (activePresetId && !picoPresets.some((preset) => preset.id === activePresetId)) {
+    activePresetId = "";
+  }
+  if (pendingDeleteId && !picoPresets.some((preset) => preset.id === pendingDeleteId)) {
+    pendingDeleteId = "";
+  }
+  renderPresetList();
+}
+
+function clearPendingDelete() {
+  clearTimeout(pendingDeleteTimer);
+  pendingDeleteTimer = null;
+  if (!pendingDeleteId) return;
+  pendingDeleteId = "";
+  renderPresetList();
+}
+
+function renderPresetList() {
+  const list = $("cfgPresetList");
+  if (!list) return;
+  updateSaveLabel();
+  if (!picoReachable) {
+    list.innerHTML = '<li class="preset-empty">Liste indisponible</li>';
+    return;
+  }
+  if (!picoPresets.length) {
+    list.innerHTML = '<li class="preset-empty">Aucun réglage sur le Pico</li>';
+    return;
+  }
+  list.innerHTML = picoPresets.map((preset) => {
+    const title = escapeHtml(preset.title || "Sans titre");
+    const id = escapeHtml(preset.id);
+    const active = preset.id === activePresetId ? " is-active" : "";
+    const armed = preset.id === pendingDeleteId;
+    const delClass = armed ? "preset-delete is-armed" : "preset-delete";
+    const delText = armed ? "Suppr." : "×";
+    return `<li class="preset-row${active}">` +
+      `<button type="button" class="preset-load" data-preset-id="${id}">${title}</button>` +
+      `<button type="button" class="${delClass}" data-preset-id="${id}" aria-label="Supprimer ${title}">${delText}</button>` +
+      `</li>`;
+  }).join("");
+}
+
+async function postSettings(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=UTF-8" },
+    body: body == null ? "" : body,
+  });
+  const detail = (await res.text()).trim();
+  if (!res.ok) {
+    const error = new Error("HTTP " + res.status);
+    error.status = res.status;
+    error.detail = detail;
+    throw error;
+  }
+  return detail ? JSON.parse(detail) : {};
+}
+
+async function savePicoSettings() {
+  clearPendingDelete();
+  const title = presetTitle();
+  configTitle = title;
+  syncTitleInput();
+  const payload = serializeConfig({ complete: false });
+  payload.title = title;
+  if (saveUpdatesSelection()) payload.id = String(activePresetId);
+  setFilesStatus("Enregistrement…", "");
+  try {
+    const summary = await postSettings(SETTINGS_URL, JSON.stringify(payload));
+    picoReachable = true;
+    activePresetId = summary.id != null ? String(summary.id) : "";
+    applyPresetSummary(summary);
+    writeLocalConfig(serializeConfig({ complete: false }));
+    setFilesStatus("Enregistré sur le Pico", "is-ok");
+  } catch (err) {
+    dbgError("CFG", err);
+    setFilesStatus(picoSaveError(err, err && err.status, err && err.detail), "is-error");
+  }
+}
+
+async function loadPicoPreset(id) {
+  clearPendingDelete();
+  const wanted = String(id);
+  setFilesStatus("Chargement…", "");
+  try {
+    const res = await fetch(SETTINGS_URL + "?id=" + encodeURIComponent(wanted), { cache: "no-store" });
+    const detail = (await res.text()).trim();
+    if (!res.ok) {
+      const error = new Error("HTTP " + res.status);
+      error.status = res.status;
+      error.detail = detail;
+      throw error;
+    }
+    const parsed = detail ? JSON.parse(detail) : null;
+    if (!applyConfigObject(parsed, { sync: true })) throw new Error("config");
+    activePresetId = wanted;
+    picoReachable = true;
+    writeLocalConfig(serializeConfig({ complete: false }));
+    renderPresetList();
+    setFilesStatus("Réglage chargé", "is-ok");
+  } catch (err) {
+    dbgError("CFG", err);
+    const status = err && err.status;
+    setFilesStatus(
+      status === 404
+        ? "Ce réglage n'est plus sur le Pico."
+        : picoSaveError(err, status, err && err.detail),
+      "is-error"
+    );
+    return;
+  }
+  try {
+    const summary = await postSettings(SETTINGS_URL + "?id=" + encodeURIComponent(wanted), "");
+    if (summary && Array.isArray(summary.presets)) applyPresetSummary(summary);
+  } catch (_) { /* le réglage est déjà appliqué */ }
+}
+
+async function deletePicoPreset(id) {
+  const wanted = String(id);
+  if (pendingDeleteId !== wanted) {
+    clearTimeout(pendingDeleteTimer);
+    pendingDeleteId = wanted;
+    renderPresetList();
+    setFilesStatus("Touchez « Suppr. » pour confirmer.", "is-warn");
+    pendingDeleteTimer = setTimeout(() => {
+      if (pendingDeleteId !== wanted) return;
+      clearPendingDelete();
+      const status = picoListStatus();
+      setFilesStatus(status[0], status[1]);
+    }, 3500);
+    return;
+  }
+  clearPendingDelete();
+  try {
+    const res = await fetch(SETTINGS_URL + "?id=" + encodeURIComponent(wanted), {
+      method: "DELETE",
+      cache: "no-store",
+    });
+    const detail = await res.text();
+    if (!res.ok && res.status !== 404) {
+      const error = new Error("HTTP " + res.status);
+      error.status = res.status;
+      error.detail = detail.trim();
+      throw error;
+    }
+    const summary = detail ? JSON.parse(detail) : {};
+    if (activePresetId === wanted) activePresetId = "";
+    picoReachable = true;
+    applyPresetSummary(summary);
+    setFilesStatus("Réglage supprimé", "");
+  } catch (err) {
+    dbgError("CFG", err);
+    setFilesStatus(picoSaveError(err, err && err.status, err && err.detail), "is-error");
+  }
+}
+
+async function loadPicoSettings() {
+  const revision = localRevision;
+  setFilesStatus("Lecture du Pico…", "");
+  try {
+    const res = await fetch(SETTINGS_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const summary = await res.json();
+    if (!summary || !Array.isArray(summary.presets)) {
+      picoReachable = false;
+      renderPresetList();
+      setFilesStatus("Le Pico n'a pas encore la liste des réglages. Relancez le déploiement.", "is-error");
+      return;
+    }
+    picoReachable = true;
+    applyPresetSummary(summary);
+    const active = summary.active != null && summary.active !== "" ? String(summary.active) : "";
+    if (active && localRevision === revision) {
+      const cfgRes = await fetch(SETTINGS_URL + "?id=" + encodeURIComponent(active), { cache: "no-store" });
+      if (cfgRes.ok && localRevision === revision) {
+        const parsed = await cfgRes.json();
+        if (applyConfigObject(parsed, { sync: true })) {
+          activePresetId = active;
+          writeLocalConfig(serializeConfig({ complete: false }));
+          renderPresetList();
+        }
+      }
+    }
+    const status = picoListStatus();
+    setFilesStatus(status[0], status[1]);
+  } catch (err) {
+    dbgError("CFG", err);
+    picoReachable = false;
+    renderPresetList();
+    setFilesStatus("Liste des réglages indisponible. Le capteur, lui, reste connecté.", "is-error");
+  }
+}
+
+function persistConfig() {
+  localRevision++;
+  writeLocalConfig(serializeConfig({ complete: false }));
+  updateSaveLabel();
 }
 
 function saveSonSettings() { persistConfig(); }
@@ -1034,6 +1369,15 @@ function bindParamResets(root) {
 }
 
 function suggestedConfigName() {
+  const title = configTitle.trim();
+  const slug = title
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  if (slug) return slug + ".json";
   const d = new Date();
   const pad = (n) => String(n).padStart(2, "0");
   return `plante-musicale-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.json`;
@@ -1104,6 +1448,27 @@ async function loadConfigFile() {
 }
 
 function wireConfigFiles() {
+  $("cfgTitle")?.addEventListener("input", (e) => {
+    configTitle = String(e.target.value || "").replace(/[\u0000-\u001f]/g, "").slice(0, TITLE_MAX);
+    if (e.target.value !== configTitle) e.target.value = configTitle;
+    persistConfig();
+  });
+  $("cfgTitle")?.addEventListener("change", (e) => {
+    configTitle = sanitizeTitle(e.target.value);
+    e.target.value = configTitle;
+    persistConfig();
+  });
+  $("cfgPresetList")?.addEventListener("click", (e) => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    const id = button.dataset.presetId;
+    if (!id) return;
+    if (button.classList.contains("preset-delete")) deletePicoPreset(id);
+    else loadPicoPreset(id);
+  });
+  $("cfgPicoSave")?.addEventListener("click", () => {
+    savePicoSettings();
+  });
   $("cfgSave")?.addEventListener("click", () => {
     saveConfigFile().catch((err) => {
       dbgError("CFG", err);
@@ -1141,6 +1506,7 @@ function syncAppliedConfig() {
   renderRolePanel();
   bindParamResets(document);
   applyAllParams();
+  syncTitleInput();
   if (audioEnabled) syncAllRoleAudio();
   requestVisualUpdate();
 }
@@ -1177,6 +1543,12 @@ function roleUsesInst(instId) {
 // Wire all sliders
 let settingsOpen = false;
 let infoOpen = false;
+let filesOpen = false;
+let aboutOpen = false;
+
+function subPanelOpen() {
+  return infoOpen || filesOpen || aboutOpen;
+}
 
 function setPanelChrome(panelId, toggleId, open) {
   const panel = $(panelId);
@@ -1199,13 +1571,29 @@ function updatePanels() {
   document.body.classList.toggle("info-open", !!(settingsOpen && infoOpen));
   const rolePanel = $("rolePanel");
   const infoPanel = $("infoPanel");
-  if (rolePanel) rolePanel.hidden = infoOpen;
+  const filesPanel = $("filesPanel");
+  const aboutPanel = $("aboutPanel");
+  if (rolePanel) rolePanel.hidden = subPanelOpen();
   if (infoPanel) infoPanel.hidden = !infoOpen;
+  if (filesPanel) filesPanel.hidden = !filesOpen;
+  if (aboutPanel) aboutPanel.hidden = !aboutOpen;
   const infoBtn = $("infoToggle");
   if (infoBtn) {
     infoBtn.inert = !settingsOpen;
     infoBtn.setAttribute("aria-hidden", settingsOpen ? "false" : "true");
     infoBtn.classList.toggle("active", settingsOpen && infoOpen);
+  }
+  const filesBtn = $("filesToggle");
+  if (filesBtn) {
+    filesBtn.inert = !settingsOpen;
+    filesBtn.setAttribute("aria-hidden", settingsOpen ? "false" : "true");
+    filesBtn.classList.toggle("active", settingsOpen && filesOpen);
+  }
+  const aboutBtn = $("aboutToggle");
+  if (aboutBtn) {
+    aboutBtn.inert = !settingsOpen;
+    aboutBtn.setAttribute("aria-hidden", settingsOpen ? "false" : "true");
+    aboutBtn.classList.toggle("active", settingsOpen && aboutOpen);
   }
   const pips = $("rolePips");
   if (pips) {
@@ -1213,17 +1601,20 @@ function updatePanels() {
     pips.setAttribute("aria-hidden", settingsOpen ? "false" : "true");
   }
   syncRoleButtons();
-  if (settingsOpen && !infoOpen) {
+  if (settingsOpen && !subPanelOpen()) {
     maybePrefetchFaust();
     unlockAudio();
     syncSensorLinkUi();
   }
   if (settingsOpen && infoOpen) refreshStatusInfo();
+  if (settingsOpen && filesOpen) syncTitleInput();
 }
 
 function setSettingsOpen(open) {
   settingsOpen = !!open;
   infoOpen = false;
+  filesOpen = false;
+  aboutOpen = false;
   updatePanels();
 }
 
@@ -1234,18 +1625,54 @@ function toggleSettings() {
 function closeSettings() {
   settingsOpen = false;
   infoOpen = false;
+  filesOpen = false;
+  aboutOpen = false;
   updatePanels();
 }
 
 function setInfoOpen(open) {
   if (!settingsOpen && open) settingsOpen = true;
   infoOpen = !!open;
+  if (infoOpen) {
+    filesOpen = false;
+    aboutOpen = false;
+  }
   updatePanels();
 }
 
 function toggleInfo() {
   if (!settingsOpen) return;
   setInfoOpen(!infoOpen);
+}
+
+function setFilesOpen(open) {
+  if (!settingsOpen && open) settingsOpen = true;
+  filesOpen = !!open;
+  if (filesOpen) {
+    infoOpen = false;
+    aboutOpen = false;
+  }
+  updatePanels();
+}
+
+function toggleFiles() {
+  if (!settingsOpen) return;
+  setFilesOpen(!filesOpen);
+}
+
+function setAboutOpen(open) {
+  if (!settingsOpen && open) settingsOpen = true;
+  aboutOpen = !!open;
+  if (aboutOpen) {
+    infoOpen = false;
+    filesOpen = false;
+  }
+  updatePanels();
+}
+
+function toggleAbout() {
+  if (!settingsOpen) return;
+  setAboutOpen(!aboutOpen);
 }
 
 function syncParamSlider(key) {
@@ -1400,7 +1827,7 @@ function syncRoleButtons() {
   let shown = 0;
   document.querySelectorAll(".role-tab").forEach((btn) => {
     const role = btn.dataset.role;
-    const on = !infoOpen && role === uiRole;
+    const on = !subPanelOpen() && role === uiRole;
     const enabled = !!(routing[role] && routing[role].on);
     btn.classList.toggle("active", on);
     btn.classList.toggle("is-off", !enabled);
@@ -1593,8 +2020,10 @@ document.querySelectorAll(".role-tab").forEach((btn) => {
   btn.addEventListener("click", () => {
     if (!settingsOpen) return;
     uiRole = btn.dataset.role;
-    if (infoOpen) {
+    if (subPanelOpen()) {
       infoOpen = false;
+      filesOpen = false;
+      aboutOpen = false;
       updatePanels();
     }
     renderRolePanel();
@@ -1643,22 +2072,56 @@ $("graphAnimEnabled")?.addEventListener("change", (e) => {
   setGraphAnimations(e.target.checked);
 });
 
+function fullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function syncFullscreenButton() {
+  const btn = $("fullscreenToggle");
+  if (!btn) return;
+  const on = !!fullscreenElement();
+  btn.textContent = on ? "Quitter le plein écran" : "Plein écran";
+  btn.setAttribute("aria-pressed", on ? "true" : "false");
+}
+
+async function toggleFullscreen() {
+  const root = document.documentElement;
+  try {
+    if (fullscreenElement()) {
+      if (document.exitFullscreen) await document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } else if (root.requestFullscreen) {
+      await root.requestFullscreen();
+    } else if (root.webkitRequestFullscreen) {
+      root.webkitRequestFullscreen();
+    }
+  } catch (_) { /* refus du navigateur */ }
+  syncFullscreenButton();
+}
+
+document.addEventListener("fullscreenchange", syncFullscreenButton);
+document.addEventListener("webkitfullscreenchange", syncFullscreenButton);
+
 function syncGeneralControls() {
   const dynBox = $("dynThreshEnabled");
   if (dynBox) dynBox.checked = !!G.dynamicThresholds;
+  const centerBox = $("autoCenterEnabled");
+  if (centerBox) centerBox.checked = !!G.autoCenter;
   const zoomBox = $("autoZoomEnabled");
   if (zoomBox) zoomBox.checked = !!G.autoZoom;
   const xfadeBox = $("zoneXfadeEnabled");
   if (xfadeBox) xfadeBox.checked = G.zoneXfade !== false;
   const dynControls = $("dynThreshControls");
   if (dynControls) dynControls.hidden = !G.dynamicThresholds;
+  const centerControls = $("autoCenterControls");
+  if (centerControls) centerControls.hidden = !G.autoCenter;
   const zoomControls = $("autoZoomControls");
   if (zoomControls) zoomControls.hidden = !G.autoZoom;
-  document.body.classList.toggle("auto-zoom-on", !!G.autoZoom);
+  document.body.classList.toggle("auto-center-on", !!G.autoCenter);
   const recenter = $("viewRecenter");
   if (recenter) {
-    recenter.hidden = !!G.autoZoom;
-    recenter.setAttribute("aria-hidden", G.autoZoom ? "true" : "false");
+    recenter.hidden = !!G.autoCenter;
+    recenter.setAttribute("aria-hidden", G.autoCenter ? "true" : "false");
   }
   const xfadeControls = $("zoneXfadeControls");
   if (xfadeControls) xfadeControls.hidden = G.zoneXfade === false;
@@ -1679,15 +2142,19 @@ function setDynamicThresholds(on) {
   requestGraphRedraw();
 }
 
+function setAutoCenter(on) {
+  G.autoCenter = !!on;
+  if (G.autoCenter) snapAutoFrame();
+  syncGeneralControls();
+  persistConfig();
+  requestGraphRedraw();
+}
+
 function setAutoZoom(on) {
   G.autoZoom = !!on;
-  if (G.autoZoom && history.length >= 2) {
-    const [lo, hi] = autoZoomTarget();
-    globalMin = Math.round(lo);
-    globalMax = Math.round(hi);
-    zoomHalf = (globalMax - globalMin) / 2;
-    viewFitted = true;
-    needStatsFlush = true;
+  if (G.autoZoom) {
+    zoomHalf = NaN;
+    snapAutoFrame();
   } else {
     zoomHalf = NaN;
   }
@@ -1709,6 +2176,9 @@ function setZoneXfade(on) {
 function bindGeneralControls() {
   $("dynThreshEnabled")?.addEventListener("change", (e) => {
     setDynamicThresholds(e.target.checked);
+  });
+  $("autoCenterEnabled")?.addEventListener("change", (e) => {
+    setAutoCenter(e.target.checked);
   });
   $("autoZoomEnabled")?.addEventListener("change", (e) => {
     setAutoZoom(e.target.checked);
@@ -1740,13 +2210,14 @@ function bindGeneralControls() {
 loadGraphAnimations();
 bindGeneralControls();
 persistConfig();
+loadPicoSettings();
 
 $("debugToggle")?.addEventListener("change", (e) => {
   toggleDebug(e.target.checked);
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && (settingsOpen || infoOpen)) closeSettings();
+  if (e.key === "Escape" && (settingsOpen || infoOpen || filesOpen || aboutOpen)) closeSettings();
 });
 
 function applyParam(key, raw) {
@@ -1927,7 +2398,7 @@ function stopWatchdog() {
 // ─── Data handling ───
 // Fenêtre de plausibilité large : le Pico mesure la période complète du capteur
 // (~20 000 µs à 50 Hz). Après un recentrage, on se cale sur les seuils.
-const ABS_MIN_INTERVAL_US = 2000;
+const ABS_MIN_INTERVAL_US = 100;
 const ABS_MAX_INTERVAL_US = 250000;
 
 function updateProvisionalView(data) {
@@ -2071,8 +2542,19 @@ function resumeFaustContexts() {
   const slots = FaustGarden.slots || {};
   for (const name of Object.keys(slots)) {
     const patch = slots[name];
-    if (patch && patch.ctx && patch.ctx.state === "suspended") patch.ctx.resume();
+    if (patch && patch.ctx && patch.ctx.state === "suspended") {
+      patch.ctx.resume().catch(() => {});
+    }
   }
+}
+
+function roleAudioMissing() {
+  if (!window.FaustGarden) return false;
+  for (const role of ROLE_IDS) {
+    const r = routing[role];
+    if (r && r.on && INST[r.inst] && !FaustGarden.get(role)) return true;
+  }
+  return false;
 }
 
 function ensureAudioRunning() {
@@ -2088,7 +2570,7 @@ function ensureAudioRunning() {
 function unlockAudio() {
   const first = !audioEnabled;
   ensureAudioRunning();
-  if (first) syncAllRoleAudio();
+  if (first || roleAudioMissing()) syncAllRoleAudio();
 }
 
 function roleDriveMode(role) {
@@ -2154,16 +2636,15 @@ function tickSignalFade(dt) {
     signalGain = Math.min(signalGain, expDecayGain(t));
     return;
   }
-  const step = Math.max(dt, 0) / 0.8;
+  const step = Math.max(dt, 0) / 0.22;
   signalGain = Math.min(1, signalGain + step);
 }
 
 function roleZoneGate(role) {
   if (!thresholdsEnabled) return 1;
+  if (role !== "interaction") return 1;
   const x = clamp(smoothedZone, 0, 1);
-  if (role === "vegetal") return expDecayGain(x);
-  if (role === "interaction") return expDecayGain(1 - x);
-  return 1;
+  return expDecayGain(1 - x);
 }
 
 function roleFaustGain(role) {
@@ -2384,7 +2865,7 @@ function maybeSyncLinkedUi() {
     lastModTick = now;
     updateRoleFilters(dt);
   }
-  if (!settingsOpen || infoOpen) return;
+  if (!settingsOpen || subPanelOpen()) return;
   const now = performance.now();
   if (now - lastLinkedUiSync < 80) return;
   lastLinkedUiSync = now;
@@ -2394,7 +2875,7 @@ function maybeSyncLinkedUi() {
 
 function syncLinkedUi(role) {
   const panel = $("rolePanel");
-  if (!settingsOpen || infoOpen || uiRole !== role || !panel) return;
+  if (!settingsOpen || subPanelOpen() || uiRole !== role || !panel) return;
   const r = routing[role];
   const t01 = smoothedT01[role] ?? roleLinkT01(role);
   if (!r.param) return;
@@ -2416,22 +2897,10 @@ function syncFaustRoleGains() {
 }
 
 function startModLoop() {
-  if (modRafId != null) return;
-  lastModTick = 0;
-  const tick = () => {
-    modRafId = null;
-    if (!audioEnabled) return;
-    try { tickModulation(); } catch (err) { dbgError("MOD", err); }
-    modRafId = requestAnimationFrame(tick);
-  };
-  modRafId = requestAnimationFrame(tick);
+  startRolePips();
 }
 
 function stopModLoop() {
-  if (modRafId != null) {
-    cancelAnimationFrame(modRafId);
-    modRafId = null;
-  }
   lastModTick = 0;
 }
 
@@ -3293,7 +3762,6 @@ function updateCurrentZone() {
 // ─── Drag handlers for threshold lines, pan and pinch ───
 
 const canvas = $("graph");
-let pinch = null;
 
 function thresholdHit(clientY, snap = DRAG_SNAP_PX) {
   if (G.dynamicThresholds || !thresholdsEnabled || history.length < 2 || !isViewReady()) return null;
@@ -3347,7 +3815,7 @@ function movePinch(t0, t1) {
   const plotH = canvas.clientHeight - 2 * GRAPH_PAD;
   if (plotH < 1) return;
   const newRange = clamp(pinch.range * (pinch.dist / dist), MIN_ZOOM_RANGE, MAX_ZOOM_RANGE);
-  const pan = ((midY - pinch.midY) / plotH) * pinch.range;
+  const pan = G.autoCenter ? 0 : ((midY - pinch.midY) / plotH) * pinch.range;
   const anchor = pinch.min + pinch.frac * pinch.range;
   globalMin = Math.round(anchor - pinch.frac * newRange + pan);
   globalMax = Math.round(globalMin + newRange);
@@ -3389,7 +3857,7 @@ canvas.addEventListener("mousedown", (e) => {
         return;
       }
     }
-    if (G.autoZoom) return;
+    if (G.autoCenter) return;
     panning = true;
     panLastY = e.clientY;
     canvas.classList.add("panning");
@@ -3452,7 +3920,7 @@ canvas.addEventListener("touchstart", (e) => {
     canvas.classList.remove("panning");
     return;
   }
-  if (G.autoZoom) return;
+  if (G.autoCenter) return;
   dragging = null;
   panning = true;
   panLastY = t.clientY;
@@ -3531,9 +3999,8 @@ function rolePipTarget(role, now) {
   const cv = currentAmbientCv();
   const alive = clamp(Math.max(cv.energyN, cv.liveN), 0, 1);
   let gate = 1;
-  if (thresholdsEnabled && role !== "ambiance") {
+  if (thresholdsEnabled && role === "interaction") {
     if (audioEnabled) gate = roleZoneGate(role);
-    else if (role === "vegetal") gate = currentZone === "interaction" ? 0 : 1;
     else gate = currentZone === "interaction" ? 1 : 0;
   }
   if (gate < 0.03) return 0;
@@ -3541,7 +4008,12 @@ function rolePipTarget(role, now) {
   return presence * gate * (floor + (1 - floor) * alive);
 }
 
+const pipStrCache = { ambiance: "", vegetal: "", interaction: "" };
+
 function tickRolePips(now) {
+  if (audioEnabled) {
+    try { tickModulation(); } catch (err) { dbgError("MOD", err); }
+  }
   const dt = pipLast ? Math.min(0.05, (now - pipLast) / 1000) : 0.016;
   pipLast = now;
   const k = 1 - Math.exp(-dt / 0.16);
@@ -3553,7 +4025,11 @@ function tickRolePips(now) {
     const level = pipLevel[role];
     const freq = 0.5 + level * 1.8;
     const wave = level < 0.02 ? 0 : 0.5 + 0.5 * Math.sin(now * 0.001 * freq * Math.PI * 2);
-    el.style.setProperty("--pip", (level * (0.25 + 0.75 * wave)).toFixed(3));
+    const valStr = (level * (0.25 + 0.75 * wave)).toFixed(3);
+    if (pipStrCache[role] !== valStr) {
+      pipStrCache[role] = valStr;
+      el.style.setProperty("--pip", valStr);
+    }
   }
   pipRaf = requestAnimationFrame(tickRolePips);
 }
@@ -3572,9 +4048,11 @@ function stopRolePips() {
 }
 
 // ─── Démarrage ───
-// La page est servie par le Pico : le flux s'ouvre sans intervention.
+// La page est servie par le Pico : le flux et le son partent avec la fenêtre.
 updateSpanButtons();
 setThresholdsEnabled(!!routing.interaction.on);
+maybePrefetchFaust();
+unlockAudio();
 connect();
 document.addEventListener("pointerdown", unlockAudio, { capture: true });
 document.addEventListener("keydown", unlockAudio, { capture: true });

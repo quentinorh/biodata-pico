@@ -3,15 +3,15 @@
 import("stdfaust.lib");
 
 // Use "sliders" to add parameters to control the instrument
-freq = hslider("freq", 80, 30, 200, 0.001);
-lp1 = hslider("lp1", 3300, 100, 10000, 0.0001);
-lp2 = hslider("lp2", 580, 100, 1000, 0.0001);
-noise1amt = hslider("noise1", 0, 0, 1, 0.0001);
-texamp = hslider("texamp", 0, 0, 1, 0.0001);
+freq = hslider("freq", 80, 30, 200, 0.001) : max(22) : min(350) : si.smoo;
+lp1 = hslider("lp1", 3300, 100, 10000, 0.0001) : max(80) : min(12000);
+lp2 = hslider("lp2", 580, 100, 1000, 0.0001) : max(80) : min(5000);
+noise1amt = hslider("noise1", 0, 0, 1, 0.0001) : si.smoo;
+texamp = hslider("texamp", 0, 0, 1, 0.0001) : si.smoo;
 texvar = hslider("texvar", 0, 0, 1, 0.0001);
 
 // Convert frequency to delay line length in samples
-f2samp(f) = (f : ma.inv : ba.sec2samp) - 1;
+f2samp(f) = max(4, min(8900, (max(20, f) : ma.inv : ba.sec2samp) - 1));
 
 // Exciter: a combination of filtered oscillators
 saw = os.sawtooth(freq*2)+os.sawtooth(freq*3.97)*0.7+os.sawtooth(freq*4.03)*0.5;

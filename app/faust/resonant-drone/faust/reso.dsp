@@ -3,20 +3,20 @@
 import("stdfaust.lib");
 
 // Use "sliders" to add parameters to control the instrument
-lp1 = hslider("lp1", 100, 50, 800, 0.001);
-f1 = hslider("f1", 100, 30, 330, 0.0001);
-f2 = hslider("f2", 123, 30, 330, 0.0001);
-f3 = hslider("f3", 87, 30, 330, 0.0001);
+lp1 = hslider("lp1", 100, 50, 800, 0.001) : max(40) : min(12000);
+f1 = hslider("f1", 100, 30, 330, 0.0001) : max(25) : min(800) : si.smoo;
+f2 = hslider("f2", 123, 30, 330, 0.0001) : max(25) : min(1100) : si.smoo;
+f3 = hslider("f3", 87, 30, 330, 0.0001) : max(20) : min(600) : si.smoo;
 pulseAmt = hslider("pulse", 0, 0, 1, 0.0001);
 noiseAmt = hslider("noise", 0, 0, 1, 0.0001);
 
 // Convert frequency to delay line length in samples
-freq2len(f) = 1.0 / f : ba.sec2samp;
+freq2len(f) = max(8, min(8900, 1.0 / max(20, f) : ba.sec2samp));
 
 // Exciter: filtered oscillators
 noise = no.noise * 0.3 * noiseAmt : fi.lowpass(2, lp1);
 pulse = os.sawtooth(f1) * 4 * pulseAmt : fi.lowpass(1, 500);
-no2 = no.sparse_noise(5) * 0.2 : fi.resonbp(15000+2000*os.osc(0.3), 5, 1);
+no2 = no.sparse_noise(5) * 0.2 : fi.resonbp(15000, 5, 1);
 srcs = noise + pulse + no2;
 exc = srcs : fi.highpass(1, 300) : fi.bandstop(1, 2500, 9000) : fi.lowpass(2, 11000);
 

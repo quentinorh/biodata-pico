@@ -1,4 +1,4 @@
-"""BioSonification pour Raspberry Pi Pico W / WH (MicroPython).
+"""BioSonification pour Raspberry Pi Pico 2 W (MicroPython).
 
 Le Pico ouvre son propre point d'accès Wi-Fi, sert l'interface web du dossier
 ``app`` et diffuse en Server-Sent Events les périodes mesurées par la PIO sur
@@ -109,6 +109,8 @@ def blink_half_ms(pulse_count, elapsed_ms, pulses_per_blink, min_half_ms, max_ha
 
 
 sensor = PeriodBuffer(config.RING_SIZE)
+sensor_sm = None
+library_cache = None
 stream_clients = 0
 access_point_ip = "192.168.4.1"
 
@@ -120,6 +122,7 @@ def on_pio_data(state_machine):
 
 
 def start_sensor():
+    global sensor_sm
     pin = Pin(config.SENSOR_PIN, Pin.IN, Pin.PULL_DOWN)
     state_machine = rp2.StateMachine(
         0,
@@ -130,6 +133,7 @@ def start_sensor():
     )
     state_machine.irq(on_pio_data)
     state_machine.active(1)
+    sensor_sm = state_machine
     return state_machine
 
 
@@ -153,23 +157,36 @@ def _disable_station():
 
 
 def _configure_access_point(access_point):
-    security = getattr(network, "AUTH_WPA2_PSK", 3)
-    attempts = (
-        {
-            "ssid": config.WIFI_SSID,
-            "key": config.WIFI_PASSWORD,
-            "security": security,
-            "channel": config.WIFI_CHANNEL,
-            "max_clients": config.WIFI_MAX_CLIENTS,
-        },
-        {
-            "ssid": config.WIFI_SSID,
-            "password": config.WIFI_PASSWORD,
-            "channel": config.WIFI_CHANNEL,
-        },
-        {"essid": config.WIFI_SSID, "password": config.WIFI_PASSWORD},
-        {"ssid": config.WIFI_SSID, "key": config.WIFI_PASSWORD},
-    )
+    if config.WIFI_OPEN:
+        security = getattr(network, "AUTH_OPEN", 0)
+        attempts = (
+            {
+                "ssid": config.WIFI_SSID,
+                "security": security,
+                "channel": config.WIFI_CHANNEL,
+                "max_clients": config.WIFI_MAX_CLIENTS,
+            },
+            {"ssid": config.WIFI_SSID, "security": security},
+            {"essid": config.WIFI_SSID, "security": security},
+        )
+    else:
+        security = getattr(network, "AUTH_WPA2_PSK", 3)
+        attempts = (
+            {
+                "ssid": config.WIFI_SSID,
+                "key": config.WIFI_PASSWORD,
+                "security": security,
+                "channel": config.WIFI_CHANNEL,
+                "max_clients": config.WIFI_MAX_CLIENTS,
+            },
+            {
+                "ssid": config.WIFI_SSID,
+                "password": config.WIFI_PASSWORD,
+                "channel": config.WIFI_CHANNEL,
+            },
+            {"essid": config.WIFI_SSID, "password": config.WIFI_PASSWORD},
+            {"ssid": config.WIFI_SSID, "key": config.WIFI_PASSWORD},
+        )
     for settings in attempts:
         try:
             access_point.config(**settings)
@@ -204,7 +221,10 @@ def start_access_point():
     _configure_access_point(access_point)
     _disable_wifi_power_save(access_point)
     access_point_ip = access_point.ifconfig()[0]
-    print("Point d'accès :", config.WIFI_SSID)
+    if config.WIFI_OPEN:
+        print("Point d'accès ouvert :", config.WIFI_SSID)
+    else:
+        print("Point d'accès :", config.WIFI_SSID)
     print("Interface web : http://%s" % access_point_ip)
     return access_point
 
@@ -212,25 +232,44 @@ def start_access_point():
 # ─── Portail captif ───
 
 
-def dns_response(request, address_bytes):
-    """Répond à toute requête A par l'adresse du Pico."""
+def dns_query(request):
+    """Nom demandé et section question, ou None si le paquet est inutilisable."""
     if len(request) < 13 or request[2] & 0x80:
         return None
     index = 12
-    while index < len(request) and request[index]:
-        index += request[index] + 1
-    index += 5  # octet nul de fin de nom + qtype + qclass
-    if index > len(request):
+    labels = []
+    while index < len(request):
+        length = request[index]
+        if length == 0:
+            index += 1
+            break
+        # Un pointeur de compression ne se copie pas comme un nom simple.
+        if length & 0xC0 or index + 1 + length > len(request) or len(labels) > 32:
+            return None
+        labels.append(request[index + 1 : index + 1 + length])
+        index += 1 + length
+    else:
         return None
-    question = request[12:index]
-    qtype = question[-4:-2]
-    header = request[0:2] + b"\x85\x80" + request[4:6]
-    if qtype != b"\x00\x01":
-        # AAAA et autres : réponse vide, le client repassera en IPv4.
-        return header + b"\x00\x00\x00\x00\x00\x00" + question
+    if index + 4 > len(request):
+        return None
+    try:
+        name = b".".join(labels).decode()
+    except UnicodeError:
+        name = "?"
+    return name, request[12 : index + 4]
+
+
+def dns_response(request, address_bytes):
+    """Répond à toute requête par l'adresse du Pico, y compris AAAA."""
+    parsed = dns_query(request)
+    if parsed is None:
+        return None
+    _name, question = parsed
     return (
-        header
-        + b"\x00\x01\x00\x00\x00\x00"
+        request[0:2]
+        + b"\x85\x80"
+        + request[4:6]  # une question
+        + b"\x00\x01\x00\x00\x00\x00"  # une réponse A, rien d'autre
         + question
         + b"\xc0\x0c"  # pointeur vers le nom de la question
         + b"\x00\x01\x00\x01"  # type A, classe IN
@@ -251,6 +290,7 @@ async def run_captive_dns():
         # Sans DNS, l'interface reste accessible en tapant l'adresse du Pico.
         print("Portail captif indisponible :", error)
         return
+    print("DNS captif :", access_point_ip)
     while True:
         waiting = True
         while True:
@@ -260,8 +300,10 @@ async def run_captive_dns():
                 break
             waiting = False
             try:
+                parsed = dns_query(request)
                 response = dns_response(request, address_bytes)
-                if response:
+                if parsed and response:
+                    print("DNS", parsed[0])
                     udp.sendto(response, client)
             except OSError:
                 pass
@@ -278,6 +320,9 @@ CONTENT_TYPES = {
     ".wasm": "application/wasm",
     ".dsp": "text/plain; charset=utf-8",
     ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ico": "image/x-icon",
+    ".webmanifest": "application/manifest+json",
 }
 
 
@@ -308,8 +353,14 @@ async def send_response(writer, status, mime, body, extra_headers=""):
         "Connection: close\r\n%s\r\n"
     ) % (status, mime, len(body), extra_headers)
     writer.write(header.encode())
-    writer.write(body)
     await writer.drain()
+    offset = 0
+    total = len(body)
+    while offset < total:
+        end = offset + 512 if offset + 512 < total else total
+        writer.write(body[offset:end])
+        await writer.drain()
+        offset = end
 
 
 def host_name(host):
@@ -323,24 +374,30 @@ def host_name(host):
     return host.split(":")[0]
 
 
-def is_captive_probe(host, path, ap_ip):
-    """Vrai pour une sonde de portail, ou pour un nom détourné par le DNS."""
+def captive_kind(host, path, ap_ip):
+    """page, text, redirect, ou None si la requête vise l'interface elle-même.
+
+    Android et Apple n'ouvrent la feuille que devant un 200 HTML.
+    Windows n'ouvre le navigateur que si connecttest.txt n'est pas le
+    texte attendu, puis que /redirect est une redirection.
+    """
     path = path.split("?", 1)[0]
-    if path.startswith("/fwlink") or path in (
+    if path in (
         "/generate_204",
         "/gen_204",
         "/generate204",
         "/hotspot-detect.html",
         "/library/test/success.html",
-        "/connecttest.txt",
-        "/ncsi.txt",
-        "/success.txt",
-        "/canonical.html",
-        "/redirect",
         "/kindle-wifi/wifistub.html",
     ):
-        return True
-    return host_name(host) not in ("", ap_ip, "localhost", "127.0.0.1")
+        return "page"
+    if path in ("/connecttest.txt", "/ncsi.txt", "/success.txt"):
+        return "text"
+    if path == "/redirect" or path == "/canonical.html" or path.startswith("/fwlink"):
+        return "redirect"
+    if host_name(host) not in ("", ap_ip, "localhost", "127.0.0.1"):
+        return "redirect"
+    return None
 
 
 def wants_captive_api(accept):
@@ -353,19 +410,15 @@ def portal_api(url):
 
 
 def portal_page(url):
-    """Page non vide. Un 204 ou un 200 vide ferait croire que l'accès internet marche."""
+    """Page courte, sans script : la fenêtre captive des téléphones n'en exécute pas."""
     return (
         "<!DOCTYPE html><html><head><meta charset=utf-8>"
+        '<meta name=viewport content="width=device-width,initial-scale=1">'
         '<meta http-equiv=refresh content="0;url=%s">'
         "<title>Plante musicale</title></head><body>"
-        "<p><a href=\"%s\">Ouvrir l'interface</a></p>"
-        "<script>location.replace('%s')</script>"
-        "<!--<WISPAccessGatewayParam><Redirect>"
-        "<MessageType>100</MessageType><ResponseCode>0</ResponseCode>"
-        "<AccessProcedure>1.0</AccessProcedure><LoginURL>%s</LoginURL>"
-        "</Redirect></WISPAccessGatewayParam>-->"
+        '<p><a href="%s">Ouvrir l\'interface</a></p>'
         "</body></html>"
-    ) % (url, url, url, url)
+    ) % (url, url)
 
 
 async def send_redirect(writer):
@@ -380,25 +433,24 @@ async def send_redirect(writer):
     )
 
 
-async def send_portal(writer, accept):
-    """Répond aux sondes par une page, pas par 204 ni par 302.
-
-    Samsung n'affiche « Go to webpage » dans les détails du Wi-Fi que s'il
-    reçoit une page HTML. Une redirection ou un 204 vide masque le bouton.
-    """
+async def send_captive(writer, kind, accept):
+    """Réponse adaptée à la sonde. Un 204 ferait croire que l'accès internet marche."""
     url = "http://%s/" % access_point_ip
     if wants_captive_api(accept):
         await send_response(
             writer, "200 OK", "application/captive+json", portal_api(url)
         )
         return
-    await send_response(
-        writer,
-        "200 OK",
-        "text/html; charset=utf-8",
-        portal_page(url),
-        "Refresh: 0;url=%s\r\n" % url,
-    )
+    if kind == "text":
+        # Ni « Microsoft Connect Test », ni « Microsoft NCSI ».
+        await send_response(writer, "200 OK", "text/plain", "plante")
+        return
+    if kind == "page":
+        await send_response(
+            writer, "200 OK", "text/html; charset=utf-8", portal_page(url)
+        )
+        return
+    await send_redirect(writer)
 
 
 def static_path(path):
@@ -468,6 +520,291 @@ def sensor_payload(sequence, intervals):
     )
 
 
+def _read_settings_file(path):
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read(config.SETTINGS_MAX_BYTES + 1)
+    except OSError:
+        return None
+    if not data or len(data) > config.SETTINGS_MAX_BYTES:
+        return None
+    return data
+
+
+def _write_settings_file(payload):
+    temporary = config.SETTINGS_PATH + ".tmp"
+    try:
+        with open(temporary, "wb") as handle:
+            handle.write(payload)
+    except OSError:
+        return False
+    try:
+        os.remove(config.SETTINGS_PATH)
+    except OSError:
+        pass
+    try:
+        os.rename(temporary, config.SETTINGS_PATH)
+    except OSError:
+        return False
+    return True
+
+
+def _valid_preset_id(value):
+    if isinstance(value, int):
+        return value > 0
+    if not isinstance(value, str) or not value or len(value) > 8:
+        return False
+    for char in value:
+        if char < "0" or char > "9":
+            return False
+    return True
+
+
+def _preset_title(raw):
+    if not isinstance(raw, str):
+        return "Sans titre"
+    text = raw.strip()
+    if not text:
+        return "Sans titre"
+    return text[:80]
+
+
+def _blank_library():
+    return {"v": 1, "active": "", "next": 1, "presets": []}
+
+
+def _migrate_library(parsed):
+    """Ancien fichier unique : un seul jeu, devenu la première entrée."""
+    presets = parsed.get("presets")
+    if isinstance(presets, list):
+        return parsed
+    if parsed.get("app") != "plante-musicale":
+        return _blank_library()
+    title = _preset_title(parsed.get("title"))
+    parsed["title"] = title
+    return {
+        "v": 1,
+        "active": "1",
+        "next": 2,
+        "presets": [{"id": "1", "title": title, "config": parsed}],
+    }
+
+
+def load_library():
+    global library_cache
+    if library_cache is not None:
+        return library_cache
+    for path in (config.SETTINGS_PATH, config.SETTINGS_PATH + ".tmp"):
+        data = _read_settings_file(path)
+        if data is None:
+            continue
+        try:
+            parsed = ujson.loads(data.decode())
+        except (UnicodeError, ValueError):
+            continue
+        if isinstance(parsed, dict):
+            library_cache = _migrate_library(parsed)
+            return library_cache
+    library_cache = _blank_library()
+    return library_cache
+
+
+def library_summary(library):
+    items = []
+    for preset in library.get("presets") or []:
+        if not isinstance(preset, dict):
+            continue
+        raw_id = preset.get("id")
+        if not _valid_preset_id(raw_id):
+            continue
+        items.append({"id": str(raw_id), "title": preset.get("title") or "Sans titre"})
+    active = library.get("active")
+    return {
+        "active": str(active) if _valid_preset_id(active) else "",
+        "presets": items,
+    }
+
+
+def preset_config(library, preset_id):
+    wanted = str(preset_id)
+    for preset in library.get("presets") or []:
+        if isinstance(preset, dict) and str(preset.get("id", "")) == wanted:
+            config_obj = preset.get("config")
+            if isinstance(config_obj, dict):
+                return config_obj
+    return None
+
+
+def store_library(library):
+    # LittleFS suspend les interruptions pendant l'effacement d'un bloc :
+    # couper la PIO un instant évite une pile d'IRQ au milieu de la réponse.
+    was_active = bool(sensor_sm and sensor_sm.active())
+    if was_active:
+        sensor_sm.active(0)
+    try:
+        gc.collect()
+        payload = ujson.dumps(library).encode()
+        if len(payload) > config.SETTINGS_MAX_BYTES:
+            return "too_large"
+        if not _write_settings_file(payload):
+            return "store"
+        return None
+    finally:
+        if was_active:
+            sensor_sm.active(1)
+
+
+def save_preset(parsed):
+    """Prépare un jeu en mémoire. L'écriture en flash suit la réponse HTTP."""
+    if not isinstance(parsed, dict) or parsed.get("app") != "plante-musicale":
+        return "invalid", "", None
+    if len(ujson.dumps(parsed)) > config.SETTINGS_MAX_BYTES:
+        return "too_large", "", None
+    library = load_library()
+    title = _preset_title(parsed.get("title"))
+    parsed["title"] = title
+    wanted = parsed.pop("id", None)
+    presets = library.setdefault("presets", [])
+    found = None
+    if _valid_preset_id(wanted):
+        wanted_str = str(wanted)
+        for preset in presets:
+            if isinstance(preset, dict) and str(preset.get("id", "")) == wanted_str:
+                found = preset
+                break
+    if found is None:
+        if len(presets) >= config.SETTINGS_MAX_PRESETS:
+            return "full", "", None
+        try:
+            next_id = int(library.get("next") or 1)
+        except (TypeError, ValueError):
+            next_id = 1
+        if next_id < 1:
+            next_id = 1
+        preset_id = str(next_id)
+        if len(ujson.dumps(library)) + len(ujson.dumps(parsed)) + 128 > config.SETTINGS_MAX_BYTES:
+            return "too_large", "", None
+        library["next"] = next_id + 1
+        found = {"id": preset_id, "title": title, "config": parsed}
+        presets.insert(0, found)
+    else:
+        preset_id = str(found["id"])
+        found["id"] = preset_id
+        found["title"] = title
+        found["config"] = parsed
+        if len(ujson.dumps(library)) > config.SETTINGS_MAX_BYTES:
+            return "too_large", "", None
+    library["active"] = preset_id
+    return None, preset_id, library_summary(library)
+
+
+def activate_preset(preset_id):
+    if not _valid_preset_id(preset_id):
+        return "invalid", None
+    preset_id = str(preset_id)
+    library = load_library()
+    if preset_config(library, preset_id) is None:
+        return "missing", library_summary(library)
+    library["active"] = preset_id
+    return None, library_summary(library)
+
+
+def delete_preset(preset_id):
+    if not _valid_preset_id(preset_id):
+        return "invalid", None
+    preset_id = str(preset_id)
+    library = load_library()
+    presets = library.get("presets") or []
+    kept = []
+    removed = False
+    for preset in presets:
+        if isinstance(preset, dict) and str(preset.get("id", "")) == preset_id:
+            removed = True
+            continue
+        kept.append(preset)
+    if not removed:
+        return "missing", library_summary(library)
+    library["presets"] = kept
+    if str(library.get("active", "")) == preset_id:
+        library["active"] = ""
+    return None, library_summary(library)
+
+
+async def read_exact(reader, count):
+    """Lit count octets. Un read() vide n'est pas toujours une fin de connexion."""
+    if count <= 0:
+        return b""
+    parts = []
+    left = count
+    misses = 0
+    while left > 0 and misses < 40:
+        chunk = await reader.read(1024 if left > 1024 else left)
+        if not chunk:
+            misses += 1
+            await asyncio.sleep_ms(25)
+            continue
+        misses = 0
+        parts.append(chunk)
+        left -= len(chunk)
+    if left > 0:
+        return None
+    return b"".join(parts)
+
+
+async def read_chunked(reader, limit):
+    """Corps HTTP découpé, utilisé par certains téléphones à la place de Content-Length."""
+    body = bytearray()
+    while True:
+        line = await reader.readline()
+        if not line:
+            return None
+        size_text = line.strip().split(b";", 1)[0]
+        try:
+            size = int(size_text or b"0", 16)
+        except ValueError:
+            return None
+        if size < 0:
+            return None
+        if size == 0:
+            while True:
+                trailer = await reader.readline()
+                if trailer in (b"\r\n", b"\n", b""):
+                    break
+            return bytes(body)
+        if len(body) + size > limit:
+            return None
+        chunk = await read_exact(reader, size)
+        if chunk is None:
+            return None
+        body.extend(chunk)
+        await reader.readline()
+
+
+async def read_request_body(reader, content_length, transfer_encoding):
+    if transfer_encoding and "chunked" in transfer_encoding:
+        return await read_chunked(reader, config.SETTINGS_MAX_BYTES)
+    if content_length > config.SETTINGS_MAX_BYTES:
+        return None
+    if content_length >= 0:
+        return await read_exact(reader, content_length)
+    # Ni longueur ni découpage : lire ce qui arrive, puis s'arrêter.
+    parts = []
+    total = 0
+    misses = 0
+    while misses < 8 and total <= config.SETTINGS_MAX_BYTES:
+        chunk = await reader.read(1024)
+        if not chunk:
+            misses += 1
+            await asyncio.sleep_ms(25)
+            continue
+        misses = 0
+        total += len(chunk)
+        parts.append(chunk)
+    if total > config.SETTINGS_MAX_BYTES:
+        return None
+    return b"".join(parts)
+
+
 async def send_sensor_stream(writer, after):
     """Flux SSE : l'interface web consomme ces messages via EventSource."""
     global stream_clients
@@ -527,6 +864,8 @@ async def handle_client(reader, writer):
         last_event_id = -1
         host = ""
         accept = ""
+        content_length = -1
+        transfer_encoding = ""
         while True:
             line = await reader.readline()
             if line in (b"\r\n", b"\n", b""):
@@ -542,6 +881,16 @@ async def handle_client(reader, writer):
                     accept = line.split(b":", 1)[1].strip().decode()
                 except UnicodeError:
                     accept = ""
+            elif lower.startswith(b"content-length:"):
+                try:
+                    content_length = int(line.split(b":", 1)[1].strip())
+                except (IndexError, ValueError):
+                    content_length = -1
+            elif lower.startswith(b"transfer-encoding:"):
+                try:
+                    transfer_encoding = line.split(b":", 1)[1].strip().decode().lower()
+                except UnicodeError:
+                    transfer_encoding = ""
             elif lower.startswith(b"last-event-id:"):
                 try:
                     last_event_id = int(line.split(b":", 1)[1].strip())
@@ -549,8 +898,139 @@ async def handle_client(reader, writer):
                     pass
 
         path, query = parse_query(raw_path)
-        if is_captive_probe(host, path, access_point_ip):
-            await send_portal(writer, accept)
+        kind = captive_kind(host, path, access_point_ip)
+        if kind:
+            print("Sonde %s %s %s" % (kind, host_name(host) or "-", path.split("?", 1)[0]))
+            await send_captive(writer, kind, accept)
+        elif path == "/api/settings" and method == "GET":
+            library = load_library()
+            preset_id = query.get("id", "")
+            if preset_id:
+                if not _valid_preset_id(preset_id):
+                    await send_response(
+                        writer, "400 Bad Request", "text/plain", "Identifiant invalide"
+                    )
+                else:
+                    stored = preset_config(library, preset_id)
+                    if stored is None:
+                        await send_response(
+                            writer, "404 Not Found", "application/json", '{"saved":false}'
+                        )
+                    else:
+                        await send_response(
+                            writer, "200 OK", "application/json", ujson.dumps(stored)
+                        )
+            else:
+                await send_response(
+                    writer, "200 OK", "application/json", ujson.dumps(library_summary(library))
+                )
+        elif path == "/api/settings" and method == "DELETE":
+            error, summary = delete_preset(query.get("id", ""))
+            if error == "invalid":
+                await send_response(
+                    writer, "400 Bad Request", "text/plain", "Identifiant invalide"
+                )
+            elif error == "missing":
+                await send_response(
+                    writer, "404 Not Found", "application/json", ujson.dumps(summary)
+                )
+            else:
+                await send_response(
+                    writer, "200 OK", "application/json", ujson.dumps(summary)
+                )
+                store_library(load_library())
+        elif path == "/api/settings" and method == "POST" and content_length == 0:
+            error, summary = activate_preset(query.get("id", ""))
+            if error == "invalid":
+                await send_response(
+                    writer, "400 Bad Request", "text/plain", "Identifiant invalide"
+                )
+            elif error == "missing":
+                await send_response(
+                    writer, "404 Not Found", "application/json", ujson.dumps(summary)
+                )
+            else:
+                await send_response(
+                    writer, "200 OK", "application/json", ujson.dumps(summary)
+                )
+        elif path == "/api/settings" and method == "POST":
+            # Lire le corps avant toute réponse : sinon le téléphone voit une
+            # coupure et croit que le Pico est injoignable.
+            too_big = (
+                not transfer_encoding
+                and content_length > config.SETTINGS_MAX_BYTES
+            )
+            payload = b"" if content_length == 0 and not transfer_encoding else None
+            if payload is None and not too_big:
+                payload = await read_request_body(
+                    reader, content_length, transfer_encoding
+                )
+            if too_big or (payload is not None and len(payload) > config.SETTINGS_MAX_BYTES):
+                await send_response(
+                    writer,
+                    "413 Payload Too Large",
+                    "text/plain",
+                    "Réglages trop volumineux",
+                )
+            elif content_length == 0 and not payload:
+                error, summary = activate_preset(query.get("id", ""))
+                if error == "invalid":
+                    await send_response(
+                        writer, "400 Bad Request", "text/plain", "Identifiant invalide"
+                    )
+                elif error == "missing":
+                    await send_response(
+                        writer, "404 Not Found", "application/json", ujson.dumps(summary or {})
+                    )
+                else:
+                    await send_response(
+                        writer, "200 OK", "application/json", ujson.dumps(summary)
+                    )
+            elif not payload:
+                await send_response(
+                    writer, "400 Bad Request", "text/plain", "Corps manquant"
+                )
+            else:
+                try:
+                    parsed = ujson.loads(payload.decode())
+                except (UnicodeError, ValueError):
+                    parsed = None
+                try:
+                    error, preset_id, summary = save_preset(
+                        parsed if isinstance(parsed, dict) else {}
+                    )
+                except Exception as error:
+                    print("Erreur reglages :", error)
+                    error, preset_id, summary = "store", "", None
+                if error == "invalid":
+                    await send_response(
+                        writer, "400 Bad Request", "text/plain", "JSON invalide"
+                    )
+                elif error == "too_large":
+                    await send_response(
+                        writer,
+                        "413 Payload Too Large",
+                        "text/plain",
+                        "Réglages trop volumineux",
+                    )
+                elif error == "full":
+                    await send_response(
+                        writer, "507 Insufficient Storage", "text/plain", "Liste pleine"
+                    )
+                elif error:
+                    await send_response(
+                        writer,
+                        "507 Insufficient Storage",
+                        "text/plain",
+                        "Enregistrement impossible",
+                    )
+                else:
+                    summary["ok"] = True
+                    summary["id"] = preset_id
+                    await send_response(
+                        writer, "200 OK", "application/json", ujson.dumps(summary)
+                    )
+                    store_library(load_library())
         elif method not in ("GET", "HEAD"):
             await send_response(
                 writer, "405 Method Not Allowed", "text/plain", "GET uniquement"
@@ -580,7 +1060,9 @@ async def handle_client(reader, writer):
             )
             await send_response(writer, "200 OK", "application/json", payload)
         elif path == "/favicon.ico":
-            await send_response(writer, "204 No Content", "image/x-icon", b"")
+            target = static_path(path)
+            if target is None or not await send_file(writer, target):
+                await send_response(writer, "204 No Content", "image/x-icon", b"")
         else:
             target = static_path(path)
             if target is None or not await send_file(writer, target):
@@ -588,6 +1070,10 @@ async def handle_client(reader, writer):
     except Exception as error:
         print("Erreur HTTP :", error)
     finally:
+        try:
+            writer.close()
+        except Exception:
+            pass
         try:
             await writer.wait_closed()
         except Exception:

@@ -9,5 +9,6 @@ dry = _*(0.2 - slowness*0.2);
 del(t) = + ~ @(t : ba.sec2samp) * 0.8 * slowness;
 
 rev_st = re.zita_rev1_stereo(0, 200, 6000, 10, 7, 44100);
+mix(d1, d2, r1, r2) = d1 + r1, d2 + r2;
 
-process = phaser*preamp <: dry, dry, rev_st :> del(1.13), del(1.7);
+process = phaser*preamp <: dry, dry, rev_st : mix : del(1.13), del(1.7);

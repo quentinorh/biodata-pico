@@ -1,15 +1,17 @@
 """Configuration locale du Pico BioSonification."""
 
-# WPA2 exige au moins 8 caractères. Changez ce mot de passe avant une
-# utilisation en public.
+# Réseau ouvert : plusieurs téléphones n'affichent le portail captif
+# qu'en l'absence de mot de passe. Remettre WIFI_OPEN à False pour
+# retrouver le WPA2. Le mot de passe doit alors faire au moins 8 caractères.
 WIFI_SSID = "Plante-Musicale"
+WIFI_OPEN = True
 WIFI_PASSWORD = "biosonique"
 WIFI_COUNTRY = "FR"
 WIFI_CHANNEL = 6
 WIFI_MAX_CLIENTS = 4
 
 # Sortie impulsionnelle (555/comparateur) du capteur MIDI Sprout.
-# GP15 correspond à la broche physique 20 du Pico WH.
+# GP15 correspond à la broche physique 20 du Pico 2 W.
 SENSOR_PIN = 15
 
 # Fréquence du compteur PIO. Un pas de comptage prend trois cycles, donc
@@ -23,6 +25,11 @@ MAX_PERIOD_US = 250_000
 
 # Dossier de l'interface web sur le système de fichiers du Pico.
 STATIC_DIR = "app"
+
+# Bibliothèque de réglages, hors du dossier app pour survivre à un déploiement.
+SETTINGS_PATH = "settings.json"
+SETTINGS_MAX_BYTES = 96 * 1024
+SETTINGS_MAX_PRESETS = 24
 
 # Anneau de mesures conservées en RAM et débit du flux SSE.
 RING_SIZE = 512

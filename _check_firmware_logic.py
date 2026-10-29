@@ -9,8 +9,9 @@ WANTED = {
     "PeriodBuffer",
     "dns_response",
     "blink_half_ms",
+    "dns_query",
     "host_name",
-    "is_captive_probe",
+    "captive_kind",
     "wants_captive_api",
     "portal_api",
     "portal_page",
@@ -28,8 +29,9 @@ exec(compile(ast.Module(body=nodes, type_ignores=[]), "main.py", "exec"), namesp
 PeriodBuffer = namespace["PeriodBuffer"]
 dns_response = namespace["dns_response"]
 blink_half_ms = namespace["blink_half_ms"]
+dns_query = namespace["dns_query"]
 host_name = namespace["host_name"]
-is_captive_probe = namespace["is_captive_probe"]
+captive_kind = namespace["captive_kind"]
 wants_captive_api = namespace["wants_captive_api"]
 portal_api = namespace["portal_api"]
 portal_page = namespace["portal_page"]
@@ -87,7 +89,9 @@ assert reply.endswith(b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04" + ip)
 assert reply[12:12 + 34] == query("connectivitycheck.gstatic.com")[12:12 + 34]
 
 aaaa = dns_response(query("captive.apple.com", b"\x00\x1c"), ip)
-assert aaaa[6:8] == b"\x00\x00", "AAAA doit rester sans réponse"
+assert aaaa[6:8] == b"\x00\x01", "AAAA doit aussi recevoir une adresse IPv4"
+assert aaaa.endswith(b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04" + ip)
+assert dns_query(query("captive.apple.com"))[0] == "captive.apple.com"
 
 assert dns_response(b"\x00" * 4, ip) is None
 assert dns_response(b"\xab\xcd\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x03abc", ip) is None
@@ -95,23 +99,25 @@ echo = bytearray(query("connectivitycheck.gstatic.com"))
 echo[2] |= 0x80
 assert dns_response(bytes(echo), ip) is None
 
-# ── Portail : sonde Android = page, pas un 204 ──
+# ── Portail : chaque système reçoit la réponse qui ouvre sa feuille ──
 ap = "192.168.4.1"
 url = "http://%s/" % ap
-assert is_captive_probe("connectivitycheck.gstatic.com", "/generate_204", ap)
-assert is_captive_probe("connectivitycheck.gstatic.com:80", "/gen_204", ap)
-assert is_captive_probe("www.google.com.", "/generate_204?x=1", ap)
-assert is_captive_probe("captive.apple.com", "/hotspot-detect.html", ap)
-assert is_captive_probe("www.msftconnecttest.com", "/connecttest.txt", ap)
-assert is_captive_probe(ap, "/generate_204", ap)
-assert is_captive_probe("192.168.4.1:80", "/", ap) is False
-assert is_captive_probe(ap, "/api/stream", ap) is False
-assert is_captive_probe("", "/index.html", ap) is False
-assert is_captive_probe("neverssl.com", "/", ap)
+assert captive_kind("connectivitycheck.gstatic.com", "/generate_204", ap) == "page"
+assert captive_kind("connectivitycheck.gstatic.com:80", "/gen_204", ap) == "page"
+assert captive_kind("www.google.com.", "/generate_204?x=1", ap) == "page"
+assert captive_kind("captive.apple.com", "/hotspot-detect.html", ap) == "page"
+assert captive_kind("www.msftconnecttest.com", "/connecttest.txt", ap) == "text"
+assert captive_kind("www.msftconnecttest.com", "/redirect", ap) == "redirect"
+assert captive_kind(ap, "/generate_204", ap) == "page"
+assert captive_kind("192.168.4.1:80", "/", ap) is None
+assert captive_kind(ap, "/api/stream", ap) is None
+assert captive_kind("", "/index.html", ap) is None
+assert captive_kind("neverssl.com", "/", ap) == "redirect"
 assert host_name(" ConnectivityCheck.Gstatic.com:80.") == "connectivitycheck.gstatic.com"
 
 page = portal_page(url)
 assert url in page and len(page) > 80
+assert "<script" not in page
 assert "Success</TITLE>" not in page
 assert "Microsoft Connect Test" not in page
 assert wants_captive_api("text/html, application/captive+json")

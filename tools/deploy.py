@@ -1,17 +1,18 @@
-"""Copie le firmware et l'interface sur un Pico W / WH via mpremote.
+"""Copie le firmware et l'interface sur un Pico 2 W via mpremote.
 
 Les fichiers de ``app`` sont compressés en gzip : le firmware les sert
 ensuite plus vite depuis le point d'accès.
 
-Les sources ``.dsp`` restent sur le PC : le Pico n'a ~848 Ko de LittleFS,
-insuffisant pour 18 patches avec leurs dossiers imbriqués (blocs de 4 Ko).
-Les WASM sont résolus via les hashes injectés dans ``catalog.js``.
+Le Pico W n'a que ~848 Ko de LittleFS, trop juste pour l'interface et les
+18 patches. Le Pico 2 W a 4 Mo de flash. Les sources ``.dsp`` restent sur
+le PC : les WASM sont résolus via les hashes injectés dans ``catalog.js``.
 
     python tools/deploy.py
     python tools/deploy.py --port COM16
 """
 
 import argparse
+import base64
 import gzip
 import json
 import os
@@ -23,9 +24,24 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIRMWARE_DIR = os.path.join(ROOT, "pico_firmware")
 APP_DIR = os.path.join(ROOT, "app")
-STATIC_FILES = ("index.html", "style.css", "script.js", "faust-player.js")
+STATIC_FILES = (
+    "index.html",
+    "style.css",
+    "script.js",
+    "faust-player.js",
+    "sw.js",
+    "manifest.webmanifest",
+    "favicon.ico",
+    "favicon-32.png",
+    "apple-touch-icon.png",
+    "icon-192.png",
+    "icon-512.png",
+    "icon-maskable-512.png",
+)
 FAUST_DIR = os.path.join(APP_DIR, "faust")
 FLASH_BLOCK = 4096
+# LittleFS alloue une paire de blocs de métadonnées à chaque dossier.
+DIR_BLOCKS = 2
 FLASH_HEADROOM = 80 * 1024
 
 FORMAT_FS = r"""
@@ -44,6 +60,16 @@ FS_INFO = r"""
 import os
 s = os.statvfs("/")
 print("FS %d %d" % (s[0] * s[2], s[0] * s[3]))
+"""
+
+PULL_SETTINGS = r"""
+import os, ubinascii
+try:
+    data = open("settings.json", "rb").read()
+except OSError:
+    data = b""
+encoded = ubinascii.b2a_base64(data).decode().replace("\n", "") if data else ""
+print("SETTINGS_B64 " + encoded)
 """
 
 
@@ -158,11 +184,13 @@ def iter_faust_files():
             yield local, rel_path
 
 
-def pack_static(work_dir):
+def pack_static(work_dir, skip_faust=False):
     packed = os.path.join(work_dir, "app")
     os.makedirs(packed, exist_ok=True)
     for name in STATIC_FILES:
         gzip_file(os.path.join(APP_DIR, name), os.path.join(packed, name + ".gz"))
+    if skip_faust:
+        return packed
     catalog = os.path.join(FAUST_DIR, "catalog.js")
     if os.path.isfile(catalog):
         data = open(catalog, "r", encoding="utf-8").read()
@@ -179,6 +207,10 @@ def pack_static(work_dir):
     return packed
 
 
+def block_bytes(size):
+    return max(FLASH_BLOCK, ((size + FLASH_BLOCK - 1) // FLASH_BLOCK) * FLASH_BLOCK)
+
+
 def flash_cost(path):
     cost = 0
     dirs = 0
@@ -186,11 +218,17 @@ def flash_cost(path):
     for dirpath, _dirnames, filenames in os.walk(path):
         dirs += 1
         for name in filenames:
-            size = os.path.getsize(os.path.join(dirpath, name))
-            cost += max(FLASH_BLOCK, ((size + FLASH_BLOCK - 1) // FLASH_BLOCK) * FLASH_BLOCK)
+            cost += block_bytes(os.path.getsize(os.path.join(dirpath, name)))
             files += 1
-    cost += dirs * FLASH_BLOCK
+    cost += dirs * DIR_BLOCKS * FLASH_BLOCK
     return cost, files, dirs
+
+
+def firmware_flash_cost():
+    cost = 0
+    for name in ("main.py", "config.py"):
+        cost += block_bytes(os.path.getsize(os.path.join(FIRMWARE_DIR, name)))
+    return cost
 
 
 def fs_info(port):
@@ -203,20 +241,70 @@ def fs_info(port):
     return None, None
 
 
+def pull_settings(port):
+    """Lit settings.json avant un formatage. b'' si absent, None si illisible."""
+    result = run_mpremote(port, ["exec", PULL_SETTINGS], check=False)
+    text = (result.stdout or "") + (result.stderr or "")
+    for line in text.splitlines():
+        if line.startswith("SETTINGS_B64 "):
+            raw = line.split(" ", 1)[1].strip()
+            if not raw:
+                return b""
+            try:
+                return base64.b64decode(raw)
+            except (ValueError, TypeError):
+                return None
+    return None
+
+
+def push_settings(port, data):
+    if not data:
+        return
+    fd, path = tempfile.mkstemp(prefix="pico-settings-", suffix=".json")
+    os.close(fd)
+    try:
+        with open(path, "wb") as handle:
+            handle.write(data)
+        run_mpremote(port, ["cp", path, ":settings.json"])
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
 def format_fs(port):
+    saved = pull_settings(port)
+    if saved is None:
+        print("settings.json illisible : le formatage continue sans le recopier.")
     print("LittleFS saturé : reformatage du Pico…")
     run_mpremote(port, ["exec", FORMAT_FS])
+    if saved:
+        push_settings(port, saved)
+        print("Réglages conservés (%d octets)." % len(saved))
+
+
+def too_small(total, needed):
+    raise SystemExit(
+        "Système de fichiers trop petit : %d Ko, il en faut environ %d Ko. "
+        "Passez sur un Pico 2 W avec le MicroPython « RPI_PICO2_W »."
+        % (total // 1024, (needed + FLASH_HEADROOM) // 1024)
+    )
 
 
 def prepare_fs(port, needed):
     total, free = fs_info(port)
     if total is not None:
         print("Flash Pico : %d Ko au total, %d Ko libres" % (total // 1024, free // 1024))
+        if total < needed + FLASH_HEADROOM:
+            too_small(total, needed)
     if free is None or free < needed + FLASH_HEADROOM:
         format_fs(port)
         total, free = fs_info(port)
         if total is not None:
             print("Après format : %d Ko libres" % (free // 1024))
+            if free < needed + FLASH_HEADROOM:
+                too_small(total, needed)
 
 
 def ensure_dir(port, path):
@@ -258,6 +346,11 @@ def main():
         action="store_true",
         help="Reformater LittleFS avant la copie",
     )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Ne recopier que le firmware et les fichiers principaux de app",
+    )
     args = parser.parse_args()
     port = args.port or find_pico_port()
     if port:
@@ -266,8 +359,9 @@ def main():
         print("Aucun Pico trouvé, mpremote choisira le premier port.")
 
     work_dir = tempfile.mkdtemp(prefix="pico-app-")
-    packed = pack_static(work_dir)
+    packed = pack_static(work_dir, skip_faust=args.quick)
     cost, files, dirs = flash_cost(packed)
+    cost += firmware_flash_cost()
     print(
         "Paquet : %d fichiers, %d dossiers, ~%d Ko flash (blocs 4 Ko)"
         % (files, dirs, cost // 1024)
@@ -275,7 +369,7 @@ def main():
     try:
         if args.format:
             format_fs(port)
-        else:
+        elif not args.quick:
             prepare_fs(port, cost)
         run_mpremote(port, ["cp", os.path.join(FIRMWARE_DIR, "main.py"), ":main.py"])
         run_mpremote(port, ["cp", os.path.join(FIRMWARE_DIR, "config.py"), ":config.py"])

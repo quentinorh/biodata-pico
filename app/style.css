@@ -3827,3 +3827,22 @@ body.settings-open.panel-role #aboutToggle {
   .top-stats .stat:nth-child(2) .value { min-width: 5ch; }
   .top-stats .stat:nth-child(3) .value { min-width: 6.5ch; }
 }
+
+/* ═══ Mobile : le panneau prend la hauteur de son contenu, la courbe le reste ═══ */
+@media (max-width: 640px) {
+  .settings-panel { max-height: 76dvh; }
+
+  body.settings-open canvas#graph {
+    height: max(24dvh, calc(100dvh - var(--sheet-h, 50dvh) + 16px));
+  }
+
+  .tz-stage { height: 128px; }
+  .settings-body { padding-top: 8px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 640px) {
+  .qz .qz-grid { margin-bottom: 8px; }
+  .qz .qz-meter { margin: 2px 0 10px; }
+  .qz-pair .qz-block { min-height: 38px; }
+  .qz-chips { margin: 10px 0 0; }
+}

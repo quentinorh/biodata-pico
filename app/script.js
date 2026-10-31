@@ -5273,3 +5273,13 @@ document.addEventListener("input", (e) => {
   apply();
   mq.addEventListener ? mq.addEventListener("change", apply) : mq.addListener(apply);
 })();
+
+// La hauteur du panneau (bottom sheet sur mobile) est exposée en CSS : la courbe se cale au-dessus.
+(function trackSheetHeight() {
+  const panel = $("settingsPanel");
+  if (!panel || !window.ResizeObserver) return;
+  new ResizeObserver(() => {
+    document.documentElement.style.setProperty("--sheet-h", panel.offsetHeight + "px");
+    requestGraphRedraw();
+  }).observe(panel);
+})();

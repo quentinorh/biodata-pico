@@ -3724,3 +3724,12 @@ body.settings-open.panel-role #aboutToggle {
 .qz-needle { width: 1px; margin-left: -.5px; box-shadow: none; }
 .qz-needle::before { width: 7px; height: 7px; left: -3px; }
 .qz-th span { width: 1px; margin-left: -.5px; }
+
+/* Le dock passe sous les bottom sheets : le panneau ouvert le recouvre. */
+@media (max-width: 640px) {
+  .role-pips,
+  body.settings-open .role-pips { z-index: 30; }
+
+  .settings-body,
+  .sheet-body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+}

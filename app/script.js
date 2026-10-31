@@ -4050,11 +4050,14 @@ function drawGraph() {
 
   drawAmbianceHalos(ctx, start, xAt, h, pad, range);
 
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
   let i = start + 1;
   while (i < history.length) {
     const inZone = inThreshZone(history[i]);
-    ctx.strokeStyle = inZone ? "#40916c" : "#ffa03c";
+    // Vert de l'arbre entre les seuils, orange de la main au-delà.
+    ctx.strokeStyle = inZone ? "rgba(139, 196, 138, .85)" : "rgb(255, 160, 60)";
     ctx.beginPath();
     ctx.moveTo(xAt(i - 1), valToY(history[i - 1], h, pad, range));
     while (i < history.length && inThreshZone(history[i]) === inZone) {
@@ -4065,8 +4068,8 @@ function drawGraph() {
   }
 
   if (thresholdsEnabled) {
-    drawThresholdLine(ctx, w, yHi, "rgba(255, 160, 60, .5)", [8, 4]);
-    drawThresholdLine(ctx, w, yLo, "rgba(255, 160, 60, .5)", [8, 4]);
+    drawThresholdLine(ctx, w, yHi, "rgba(255, 160, 60, .55)", [2, 4]);
+    drawThresholdLine(ctx, w, yLo, "rgba(255, 160, 60, .55)", [2, 4]);
   }
 
   for (let j = start; j < history.length; j++) {
@@ -4076,13 +4079,13 @@ function drawGraph() {
     const inZone = inThreshZone(history[j]);
 
     ctx.beginPath();
-    ctx.arc(nx, ny, 5, 0, Math.PI * 2);
-    ctx.fillStyle = inZone ? "rgba(139, 196, 138, .2)" : "rgba(255, 160, 60, .2)";
+    ctx.arc(nx, ny, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = inZone ? "rgba(139, 196, 138, .16)" : "rgba(255, 160, 60, .16)";
     ctx.fill();
 
     ctx.beginPath();
-    ctx.arc(nx, ny, 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = inZone ? "#b5e6b0" : "#ffc470";
+    ctx.arc(nx, ny, 2, 0, Math.PI * 2);
+    ctx.fillStyle = inZone ? "#d6f0d2" : "#ffd6a6";
     ctx.fill();
   }
 
@@ -4093,8 +4096,8 @@ function drawGraph() {
   if (thresholdsEnabled) {
     const hiTop = yHi - 10;
     const loTop = yLo - 10;
-    const hiText = "▲ " + Math.round(threshHi).toLocaleString() + " µs";
-    const loText = "▼ " + Math.round(threshLo).toLocaleString() + " µs";
+    const hiText = "↑ " + Math.round(threshHi).toLocaleString("fr-FR") + " µs";
+    const loText = "↓ " + Math.round(threshLo).toLocaleString("fr-FR") + " µs";
     if (hiText !== _lblHiCache.text || Math.abs(hiTop - _lblHiCache.top) >= 1) {
       _lblHiCache = { top: hiTop, text: hiText };
       elHi.style.top = hiTop + "px";
@@ -4144,11 +4147,13 @@ function drawAmbianceHalos(ctx, start, xAt, h, pad, range) {
 function drawThresholdLine(ctx, w, y, color, dash) {
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1;
   ctx.setLineDash(dash);
+  // Calé sur le demi-pixel : le filet reste net au lieu de baver sur deux lignes.
+  const yy = Math.round(y) + 0.5;
   ctx.beginPath();
-  ctx.moveTo(0, y);
-  ctx.lineTo(w, y);
+  ctx.moveTo(0, yy);
+  ctx.lineTo(w, yy);
   ctx.stroke();
   ctx.restore();
 }

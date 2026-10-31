@@ -31,6 +31,7 @@ STATIC_FILES = (
     "faust-player.js",
     "quantizer.js",
     "default-config.js",
+    "inter-var.woff2",
     "sw.js",
     "manifest.webmanifest",
     "favicon.ico",

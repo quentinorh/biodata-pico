@@ -8,6 +8,7 @@ var SHELL = [
   "./faust-player.js",
   "./quantizer.js",
   "./default-config.js",
+  "./inter-var.woff2",
   "./faust/catalog.js",
   "./manifest.webmanifest",
   "./favicon.ico",

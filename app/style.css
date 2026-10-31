@@ -3133,3 +3133,541 @@ body:not(.settings-open) .role-pip.is-off { display: flex; opacity: .45; }
 @media (min-width: 641px) {
   .inst-inline .inst-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Couche « dry » — Inter, échelle typo resserrée, gris neutres, filets.
+   Référence : Linear (encre #f7f8f8 → #62666d, surfaces #0f1011 → #191a1b,
+   filets #23252a). L'accent reste la couleur de l'instrument, et seulement
+   là où il porte une information (remplissage, sélection, valeur pilotée).
+   ═══════════════════════════════════════════════════════════════════ */
+@font-face {
+  font-family: "Inter";
+  src: url("inter-var.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ink: #f7f8f8;
+  --ink-2: #d0d6e0;
+  --ink-3: #8a8f98;
+  --ink-4: #62666d;
+  --surface-2: rgba(20, 21, 22, .9);
+  --surface-3: #18191a;
+  --surface-4: #202124;
+  --hairline: #23252a;
+  --hairline-2: #34343a;
+  --t-label: 11px;
+  --t-body: 13px;
+  --t-value: 12px;
+}
+
+body { font-family: var(--font); -webkit-font-smoothing: antialiased; }
+
+.settings-panel,
+.settings-panel *,
+.sheet,
+.sheet *,
+.role-pips {
+  font-family: var(--font) !important;
+}
+
+.param-val,
+.sensor-live,
+.sensor-ratio,
+.tz-tag,
+.qz-zone span,
+.qz-seg button,
+.pick-row-sub {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Les sheets passent au-dessus du dock ─── */
+.sheet-backdrop { z-index: 47; }
+.sheet { z-index: 48; }
+.pick-backdrop { z-index: 50; }
+.pick-sheet { z-index: 51; max-height: 70dvh; }
+
+.sheet-head { padding: 0 12px 8px 16px; }
+.sheet-head h3 { font-size: var(--t-body); font-weight: 600; letter-spacing: -.1px; color: var(--ink); }
+.sheet-close { width: 28px; height: 28px; background: var(--surface-4); color: var(--ink-3); }
+.sheet-body { padding: 0 16px 20px; }
+
+/* ─── Titres de section : petits, posés, sans capitales ─── */
+.settings-section h3,
+.mix-title,
+.qz-label {
+  margin: 0 0 8px;
+  font-size: var(--t-label);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-3);
+}
+
+.settings-section { padding: 14px 0; border-bottom: 1px solid var(--hairline); }
+.settings-card {
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.connect-status { font-size: var(--t-label); font-weight: 500; }
+.connect-info { font-size: var(--t-label); color: var(--ink-3); }
+
+.settings-btn,
+#btn {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--hairline-2);
+  color: var(--ink-2);
+  font-size: var(--t-value);
+  font-weight: 500;
+}
+
+#btn { background: var(--surface-3) !important; color: var(--ink-2) !important; }
+.settings-btn:active, #btn:active { transform: scale(.96); }
+
+.toggle-row { gap: 10px; align-items: center; padding: 4px 0; }
+.toggle-row strong { font-size: var(--t-body); font-weight: 500; color: var(--ink); }
+
+/* ─── Ligne d'en-tête d'un instrument : interrupteur + nom + paramètre piloté ─── */
+.inst-row { gap: 10px; margin: 0 0 12px; }
+
+.inst-open {
+  min-height: 44px;
+  padding: 6px 10px 6px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.inst-open:hover { background: var(--surface-3); }
+.inst-open-text { gap: 2px; }
+.inst-open-name { font-size: var(--t-body); font-weight: 500; letter-spacing: -.1px; color: var(--ink); }
+.inst-open-sub { font-size: var(--t-label); font-weight: 400; color: var(--ink-3); }
+.inst-open-chev { stroke: var(--ink-4); }
+
+/* ─── Interrupteurs : plus petits, nets ─── */
+.switch-ui { width: 34px; height: 20px; border-radius: 10px; }
+.switch-ui::after { width: 16px; height: 16px; top: 2px; left: 2px; }
+.switch input:checked + .switch-ui::after { transform: translateX(14px); }
+
+/* ─── Sliders ─── */
+.param-row { margin: 0 0 10px; row-gap: 0; grid-template-rows: auto 28px; }
+
+/* Sans bouton de liaison, le nom part du bord : plus de décalage de 8 px. */
+.param-row .param-label { grid-column: 1 / 3; }
+
+.param-row .param-label,
+.param-row .param-link span {
+  font-size: var(--t-value);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.param-row .param-val { font-size: var(--t-value); font-weight: 400; color: var(--ink-3); }
+.param-row.is-linked .param-val { color: rgb(var(--ctl-rgb)); }
+.param-row .param-reset { opacity: .5; }
+
+.param-row input[type=range] { height: 28px; }
+
+.param-row input[type=range]::-webkit-slider-runnable-track,
+.settings-mix .mix-cell input[type=range]::-webkit-slider-runnable-track,
+.mix-panel .settings-mix .mix-cell input[type=range]::-webkit-slider-runnable-track,
+.param-row.is-dragging input[type=range]::-webkit-slider-runnable-track,
+.param-row.is-linked input[type=range]::-webkit-slider-runnable-track {
+  height: 3px;
+  background: linear-gradient(90deg, rgb(var(--ctl-rgb)) var(--f, 0%), var(--hairline-2) var(--f, 0%));
+}
+
+.param-row input[type=range]::-moz-range-track { height: 3px; background: var(--hairline-2); }
+.param-row input[type=range]::-moz-range-progress { height: 3px; }
+
+.param-row input[type=range]::-webkit-slider-thumb,
+.settings-mix .mix-cell input[type=range]::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -7.5px;
+  border-width: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+}
+
+.param-row .param-link input[type=checkbox] { width: 16px; height: 16px; box-shadow: inset 0 0 0 1.5px var(--hairline-2); }
+.param-row .param-link input[type=checkbox]::after { inset: 4px; }
+
+/* Volume de l'instrument : la ligne la plus lisible du panneau. */
+.track-volume { margin: 0 0 12px; padding: 10px 12px 2px; border-radius: 10px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hairline); }
+.track-volume .param-row .param-label { font-size: var(--t-body); font-weight: 500; color: var(--ink); }
+.track-volume .param-row { grid-template-rows: auto 32px; }
+.track-volume input[type=range] { height: 32px; }
+.track-volume input[type=range]::-webkit-slider-runnable-track { height: 4px; }
+.track-volume input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -9px; }
+
+/* Cartes de réglages : filets fins, pas de fond qui pèse. */
+.sheet-card,
+.mix-panel .settings-mix {
+  padding: 2px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.sheet-card .param-row + .param-row,
+.mix-panel .settings-mix .param-row + .param-row { box-shadow: inset 0 1px 0 var(--hairline); }
+
+/* ─── Relevé capteur et courbe ─── */
+.role-panel .sensor-readout { margin: 0 0 8px; }
+.sensor-live { font-size: var(--t-value); font-weight: 500; color: rgb(var(--ctl-rgb, 180, 188, 200)); }
+.sensor-ratio { font-size: var(--t-label); color: var(--ink-3); }
+
+.tz-stage { margin-left: 0; background: transparent; box-shadow: inset 0 -1px 0 var(--hairline-2); }
+.tz-tag { font-size: 10px; font-weight: 500; color: var(--ink-3); }
+.tz-pt.p0 .tz-tag { left: 0; transform: none; }
+.tz-col.is-active .tz-tag, .tz-pt.is-grab .tz-tag { color: var(--ink); }
+
+/* ─── Quantizer : champs en lignes, segmentés sobres ─── */
+.qz-pair { grid-template-columns: minmax(0, 1fr); gap: 0; }
+
+.qz-pair .qz-block,
+.qz-sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  min-height: 40px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.qz-pair .qz-block .qz-label { margin: 0; }
+
+.qz-seg {
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  grid-template-columns: repeat(var(--n), minmax(30px, 1fr));
+}
+
+.qz-pair .qz-seg { flex: 0 1 auto; min-width: 0; }
+
+.qz-seg-pill {
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc((100% - 4px) / var(--n));
+  border-radius: 6px;
+  background: var(--surface-4);
+  box-shadow: inset 0 0 0 1px var(--hairline-2), 0 1px 2px rgba(0, 0, 0, .4);
+}
+
+.qz-seg button {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: var(--t-value);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.qz-seg button[aria-checked="true"] { color: var(--ink); }
+
+.qz-chips { gap: 6px; margin: 12px 0; }
+
+.qz-chip {
+  min-height: 30px;
+  gap: 6px;
+  border-radius: 8px;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  color: var(--ink-3);
+  font-size: var(--t-value);
+  font-weight: 500;
+}
+
+.qz-chip[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--surface-4);
+  box-shadow: inset 0 0 0 1px var(--hairline-2);
+}
+
+.qz-chip-box { width: 12px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1.5px var(--ink-4); }
+.qz-chip[aria-pressed="true"] .qz-chip-box { box-shadow: none; }
+
+.qz-zone span { font-size: 10px; font-weight: 500; color: var(--ink-3); }
+.qz .sensor-live { font-size: var(--t-value); font-weight: 500; }
+.qz .sensor-ratio { font-size: var(--t-label); }
+.qz .qz-grid { height: 14px; gap: 2px; }
+
+/* ─── Choix de l'instrument ─── */
+.pick-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 12px;
+  padding: 0 10px 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  cursor: pointer;
+  transition: transform .12s var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pick-open:active { transform: scale(.98); }
+.pick-open-label { font-size: var(--t-value); color: var(--ink-3); }
+.pick-open-name { margin-left: auto; font-size: var(--t-body); font-weight: 500; color: var(--ink); }
+
+.pick-list {
+  margin: 0 0 12px;
+  padding: 2px 0;
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-size: var(--t-body);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pick-row + .pick-row { box-shadow: inset 0 1px 0 var(--hairline); }
+.pick-row:active { background: var(--surface-3); }
+.pick-row-name { flex: 1 1 auto; min-width: 0; }
+.pick-row-sub { font-size: var(--t-label); color: var(--ink-4); }
+
+.pick-row-check {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: rgb(var(--ctl-rgb));
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transform: scale(.25);
+  transition: opacity .2s var(--ease-out), transform .2s var(--ease-out);
+}
+
+.pick-row[aria-checked="true"] { color: var(--ink); }
+.pick-row[aria-checked="true"] .pick-row-check { opacity: 1; transform: scale(1); }
+
+.inst-inline { padding: 10px 10px 2px; border-radius: 12px; background: transparent; box-shadow: inset 0 0 0 1px var(--hairline); }
+
+/* ─── Dock : sobre ─── */
+@media (max-width: 640px) {
+  :root { --t-label: 12px; --t-body: 14px; --t-value: 13px; }
+
+  .role-pips,
+  body.settings-open .role-pips {
+    background: rgba(15, 16, 17, .86);
+    box-shadow: 0 0 0 1px var(--hairline), 0 12px 32px rgba(0, 0, 0, .5);
+  }
+
+  .param-row input[type=range]::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: -10.5px; }
+  .param-row { grid-template-rows: auto 36px; }
+  .param-row input[type=range] { height: 36px; }
+  .switch-ui { width: 40px; height: 24px; border-radius: 12px; }
+  .switch-ui::after { width: 20px; height: 20px; }
+  .switch input:checked + .switch-ui::after { transform: translateX(16px); }
+  .pick-row { min-height: 46px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pick-row-check, .pick-open { transition: none; }
+}
+
+/* ─── Réglages (VOL, BPM) : compact, sans titre ni carte ─── */
+.mix-panel .settings-mix {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.mix-panel .settings-mix .param-row { padding: 0; box-shadow: none; }
+
+/* ─── Sliders : resserrés, remplissage bien visible ─── */
+:root { --ctl-rgb: 237, 239, 243; }
+
+.param-row { margin-bottom: 6px; grid-template-rows: auto 26px; }
+.param-row input[type=range] { height: 26px; }
+.settings-section .param-row { margin-bottom: 2px; }
+
+.param-row input[type=range]::-webkit-slider-runnable-track,
+.settings-mix .mix-cell input[type=range]::-webkit-slider-runnable-track,
+.mix-panel .settings-mix .mix-cell input[type=range]::-webkit-slider-runnable-track,
+.param-row.is-dragging input[type=range]::-webkit-slider-runnable-track,
+.param-row.is-linked input[type=range]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgb(var(--ctl-rgb)) var(--f, 0%), #2a2c31 var(--f, 0%));
+}
+
+.param-row input[type=range]::-moz-range-track { height: 4px; background: #2a2c31; }
+.param-row input[type=range]::-moz-range-progress { height: 4px; }
+.param-row input[type=range]::-webkit-slider-thumb { margin-top: -7px; }
+
+/* ─── Icônes de la barre : seulement avec les Réglages ─── */
+body.settings-open.panel-role #infoToggle,
+body.settings-open.panel-role #filesToggle,
+body.settings-open.panel-role #aboutToggle {
+  transform: translateX(0);
+  pointer-events: none;
+  opacity: 0;
+}
+
+#infoToggle, #filesToggle, #aboutToggle { transition: transform .28s var(--ease-out), opacity .2s var(--ease-out); }
+
+/* ─── Mobile : mesures en une ligne, en haut ─── */
+.top-stats { display: none; }
+
+@media (max-width: 640px) {
+  .top-stats {
+    position: fixed;
+    top: calc(var(--edge-top) + 10px);
+    right: var(--edge-right);
+    z-index: 10;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .top-stats .stat-max,
+  .top-stats .stat-min { position: static; }
+
+  .top-stats .stat-extremum { font: 500 11px/1 var(--font); color: var(--ink-2); }
+  .top-stats .stat-extremum .unit { display: none; }
+  .top-stats .stat-max::before { content: "↑"; color: var(--ink-4); margin-right: 2px; }
+  .top-stats .stat-min::before { content: "↓"; color: var(--ink-4); margin-right: 2px; }
+
+  .top-stats .stats {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+    padding: 0;
+    background: none;
+  }
+
+  .top-stats .stat { display: flex; align-items: baseline; gap: 3px; }
+  .top-stats .stat .label { font: 400 10px/1 var(--font); color: var(--ink-4); text-transform: none; letter-spacing: 0; }
+  .top-stats .stat .value { font: 500 11px/1 var(--font); color: var(--ink-2); }
+
+  /* Ouvrir les Réglages fait sortir trois icônes : la ligne de mesures leur laisse la place. */
+  body.settings-open:not(.panel-role) .top-stats { opacity: 0; }
+}
+
+@media (max-width: 640px) {
+  .top-stats .stat .label { font-size: 0; }
+  .top-stats .stat:nth-child(1) .value::after { content: "/s"; margin-left: 1px; color: var(--ink-4); font-size: 10px; font-weight: 400; }
+  .top-stats .stat:nth-child(2) .label::after { content: "moy."; font-size: 10px; }
+  .top-stats .stat:nth-child(3) .label::after { content: "total"; font-size: 10px; }
+}
+
+/* ═══ Pilules (référence : sélecteur « Comfort / Standard / Sport ») ═══
+   Segmentés (Pas, Plafond) : une pilule blanche glisse sous le choix.
+   Options (Ternaire, Pistes, Delay) : même rail, chaque option allumée reçoit
+   sa propre pilule, qui apparaît en grandissant depuis le centre. */
+.qz-seg {
+  padding: 3px;
+  border-radius: 999px;
+  background: #24262b;
+  box-shadow: none;
+}
+
+.qz-seg-pill {
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--n));
+  border-radius: 999px;
+  background: #f4f6f8;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .25);
+  transition: transform .26s cubic-bezier(.2, 0, 0, 1);
+}
+
+.qz-seg button {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--ink-3);
+  transition: color .2s cubic-bezier(.2, 0, 0, 1), transform .12s var(--ease-out);
+}
+
+.qz-seg button[aria-checked="true"] { color: #0f1011; }
+
+.qz-chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 3px;
+  margin: 12px 0;
+  border-radius: 999px;
+  background: #24262b;
+}
+
+.qz-chip {
+  position: relative;
+  min-height: 30px;
+  border-radius: 999px;
+  background: none;
+  box-shadow: none;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  isolation: isolate;
+  transition: color .2s cubic-bezier(.2, 0, 0, 1), transform .12s var(--ease-out);
+}
+
+.qz-chip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: #f4f6f8;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .25);
+  opacity: 0;
+  transform: scale(.6);
+  transition: opacity .2s cubic-bezier(.2, 0, 0, 1), transform .28s cubic-bezier(.2, 0, 0, 1);
+}
+
+.qz-chip[aria-pressed="true"] { color: #0f1011; background: none; box-shadow: none; }
+.qz-chip[aria-pressed="true"]::before { opacity: 1; transform: scale(1); }
+.qz-chip .qz-chip-box { display: none; }
+.qz-chip:active { transform: scale(.96); }
+
+@media (max-width: 640px) {
+  .qz-seg button, .qz-chip { min-height: 34px; font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qz-seg-pill, .qz-chip, .qz-chip::before, .qz-seg button { transition: none; }
+}

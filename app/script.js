@@ -1723,6 +1723,8 @@ function updatePanels() {
   const mixPanel = $("mixPanel");
   if (mixPanel) mixPanel.hidden = panelView !== "mix" || subPanelOpen();
   $("settingsToggle")?.classList.toggle("active", settingsOpen && panelView === "mix" && !subPanelOpen());
+  // Les icônes rouage, fichier et info ne sortent qu'avec les Réglages, pas avec un instrument.
+  document.body.classList.toggle("panel-role", panelView === "role" && !subPanelOpen());
   if (infoPanel) infoPanel.hidden = !infoOpen;
   if (filesPanel) filesPanel.hidden = !filesOpen;
   if (aboutPanel) aboutPanel.hidden = !aboutOpen;
@@ -4627,7 +4629,7 @@ function renderQuantPanel() {
 function quantSheetHtml() {
   const q = G.quant;
   let html = `<div class="qz">`;
-  html += `<div class="qz-block"><div class="qz-label"><span>Instrument</span><span class="qz-hint">Ambient Garden</span></div>`;
+  html += `<div class="qz-block"><div class="qz-label"><span>Instrument</span></div>`;
   html += qzSegHtml("qzTimbre", Object.keys(Quantizer.TIMBRES).map((v) => ({ v, l: Quantizer.TIMBRES[v].label })), q.timbre) + `</div>`;
   html += `<div class="qz-block"><div class="qz-label"><span>Octave</span></div>`;
   html += qzSegHtml("qzOctave", [-2, -1, 0, 1, 2].map((v) => ({ v, l: v > 0 ? "+" + v : v === 0 ? "0" : "−" + -v })), q.octave) + `</div>`;
@@ -4907,13 +4909,15 @@ function trackVolumeHtml(key) {
 function linkedLabel(role) {
   const r = routing[role];
   const spec = r && paramSpec(r.inst, r.param);
-  return spec ? "Plante → " + spec.label : "Aucun paramètre lié";
+  return spec ? spec.label : "Aucun paramètre lié";
 }
 
 function roleSheetHtml(role) {
   const r = routing[role];
   const t01 = smoothedT01[role] ?? roleLinkT01(role);
-  let html = `<div class="sheet-sec role-panel" data-role="${role}">${instTilesHtml(role)}</div>`;
+  let html = `<button type="button" class="pick-open role-panel" data-role="${role}" id="pickOpen">` +
+    `<span class="pick-open-label">Instrument</span><span class="pick-open-name">${INST[r.inst].label}</span>` +
+    `<svg class="inst-open-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>`;
   html += `<div class="sheet-sec sheet-card role-panel" data-role="${role}">`;
   html += instParams(r.inst).map((p) => {
     const live = roleParamValue(role, p.id, t01);
@@ -4936,23 +4940,59 @@ function roleSheetHtml(role) {
   return html;
 }
 
-// Choix de l'instrument en tuiles (comme les sons de Breathwrk) : tout se voit d'un coup d'œil.
-function instTilesHtml(role) {
+// Choix de l'instrument : une liste compacte dans son propre bottom sheet (mobile),
+// ou dépliée sur place (desktop).
+function pickListHtml(role) {
   const r = routing[role];
-  return `<div class="inst-tiles" role="radiogroup" aria-label="Instrument">` + Object.keys(INST).map((id) => {
+  return `<div class="pick-list role-panel" data-role="${role}" role="radiogroup" aria-label="Instrument">` + Object.keys(INST).map((id) => {
     const used = roleUsesInst(id);
-    const other = used && used !== role ? `<span class="inst-tile-sub">${ROLE_META[used].title}</span>` : "";
-    return `<button type="button" class="inst-tile" role="radio" data-inst="${id}" aria-checked="${id === r.inst}">` +
-      `<span class="inst-tile-name">${INST[id].label}</span>${other}</button>`;
+    const other = used && used !== role ? `<span class="pick-row-sub">${ROLE_META[used].title}</span>` : "";
+    return `<button type="button" class="pick-row" role="radio" data-inst="${id}" aria-checked="${id === r.inst}">` +
+      `<span class="pick-row-name">${INST[id].label}</span>${other}` +
+      `<svg class="pick-row-check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.4 6.6 11.4 12.5 4.8"/></svg></button>`;
   }).join("") + `</div>`;
+}
+
+function openPicker(role) {
+  const choose = (e) => {
+    const row = e.target.closest(".pick-row");
+    if (!row) return;
+    closePicker();
+    if (row.dataset.inst !== routing[role].inst) setRoleInstrument(role, row.dataset.inst);
+  };
+  if (!isMobileSheet()) {
+    const host = document.querySelector(".inst-inline");
+    if (!host) return;
+    const open = host.querySelector(".pick-list");
+    if (open) { open.remove(); return; }
+    host.querySelector("#pickOpen")?.insertAdjacentHTML("afterend", pickListHtml(role));
+    host.querySelector(".pick-list").addEventListener("click", choose);
+    return;
+  }
+  const sheet = $("pickSheet");
+  const body = $("pickBody");
+  body.innerHTML = pickListHtml(role);
+  body.firstElementChild.addEventListener("click", choose);
+  sheet.hidden = false;
+  sheet.setAttribute("aria-hidden", "false");
+  $("pickBackdrop")?.classList.add("open");
+  requestAnimationFrame(() => sheet.classList.add("open"));
+  body.querySelector('.pick-row[aria-checked="true"]')?.scrollIntoView({ block: "center" });
+}
+
+function closePicker() {
+  const sheet = $("pickSheet");
+  if (!sheet || sheet.hidden) return;
+  sheet.classList.remove("open");
+  sheet.style.transform = "";
+  sheet.setAttribute("aria-hidden", "true");
+  $("pickBackdrop")?.classList.remove("open");
+  setTimeout(() => { if (!sheet.classList.contains("open")) sheet.hidden = true; }, 320);
 }
 
 function bindRoleSheet(body, role) {
   const r = routing[role];
-  body.querySelector(".inst-tiles")?.addEventListener("click", (e) => {
-    const tile = e.target.closest(".inst-tile");
-    if (tile && tile.dataset.inst !== routing[role].inst) setRoleInstrument(role, tile.dataset.inst);
-  });
+  body.querySelector("#pickOpen")?.addEventListener("click", () => openPicker(role));
   body.querySelectorAll("input[data-link-param]").forEach((box) => {
     box.addEventListener("change", () => setRoleParam(role, box.checked ? box.dataset.linkParam : null));
   });
@@ -4996,12 +5036,12 @@ function renderSheet() {
   const { sheet, body, title } = t;
   const scroll = body.scrollTop;
   if (sheetKind === "quant") {
-    if (title) title.textContent = "Son du quantizer";
+    if (title) title.textContent = "Quantizer";
     body.innerHTML = quantSheetHtml();
     bindQuantPanel(body);
   } else {
     const role = uiRole;
-    if (title) title.textContent = (ROLE_META[role] ? ROLE_META[role].title : "Piste") + " · instrument";
+    if (title) title.textContent = ROLE_META[role] ? ROLE_META[role].title : "Piste";
     if (sheet) sheet.dataset.role = role;
     body.innerHTML = roleSheetHtml(role);
     bindRoleSheet(body, role);
@@ -5044,6 +5084,7 @@ function openSheet(kind) {
 }
 
 function closeSheet() {
+  closePicker();
   if (!sheetKind) return;
   sheetKind = "";
   document.querySelectorAll(".inst-inline").forEach((el) => el.remove());
@@ -5160,15 +5201,50 @@ document.addEventListener("input", (e) => {
     bindSheetDrag(sheet, [sheet.querySelector(".sheet-grab"), sheet.querySelector(".sheet-head")], closeSheet);
   }
   $("sheetBackdrop")?.addEventListener("click", closeSheet);
+  const pick = $("pickSheet");
+  if (pick) {
+    pick.querySelector(".sheet-close")?.addEventListener("click", closePicker);
+    bindSheetDrag(pick, [pick.querySelector(".sheet-grab"), pick.querySelector(".sheet-head")], closePicker);
+  }
+  $("pickBackdrop")?.addEventListener("click", closePicker);
   const panel = $("settingsPanel");
   if (panel) bindSheetDrag(panel, [panel.querySelector(".sheet-grab")], () => {
     if (window.matchMedia("(max-width: 640px)").matches) closeSettings();
   });
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("pickSheet") && !$("pickSheet").hidden) {
+      e.stopImmediatePropagation();
+      closePicker();
+      return;
+    }
     if (e.key === "Escape" && sheetKind) {
       e.stopImmediatePropagation();
       closeSheet();
     }
   }, true);
   paintRanges(document);
+})();
+
+
+// Sur mobile, les mesures (max, min, impulsions/s, moyenne, total) passent en une ligne en haut.
+(function placeStats() {
+  const mq = window.matchMedia ? window.matchMedia("(max-width: 640px)") : null;
+  const top = $("topStats");
+  const max = document.querySelector(".stat-max");
+  const min = document.querySelector(".stat-min");
+  const stats = document.querySelector(".bottom-right .stats");
+  const home = document.querySelector(".bottom-right");
+  if (!mq || !top || !max || !min || !stats || !home) return;
+  const anchor = document.createComment("stats");
+  max.before(anchor);
+  const apply = () => {
+    if (mq.matches) {
+      top.append(max, min, stats);
+    } else {
+      anchor.after(max, min);
+      home.append(stats);
+    }
+  };
+  apply();
+  mq.addEventListener ? mq.addEventListener("change", apply) : mq.addListener(apply);
 })();

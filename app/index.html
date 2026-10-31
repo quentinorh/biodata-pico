@@ -16,7 +16,8 @@
 <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=map44">
+<link rel="preload" href="inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css?v=map47">
 </head>
 <body>
 
@@ -67,6 +68,7 @@
   </button>
 </div>
 
+<div class="top-stats" id="topStats" aria-label="Mesures"></div>
 <div class="stat-extremum stat-max" title="Maximum">
   <span id="max">&mdash;</span><span class="unit"> µs</span>
 </div>
@@ -100,7 +102,6 @@
 
   <div class="settings-body">
     <section id="mixPanel" class="mix-panel" hidden>
-      <h3 class="mix-title">Réglages</h3>
     <div class="settings-mix">
         <div class="param-row mix-cell">
           <div class="param-head">
@@ -144,7 +145,6 @@
         </span>
         <span>
           <strong>Animations du graphe</strong>
-          <small>Ondulations autour des notes. À couper si le téléphone ralentit</small>
         </span>
       </label>
       <button type="button" class="settings-btn" id="fullscreenToggle" onclick="toggleFullscreen()" aria-pressed="false">Plein écran</button>
@@ -158,7 +158,6 @@
         </span>
         <span>
           <strong>Seuils dynamiques</strong>
-          <small>Les seuils suivent le signal, avec une marge et un lissage</small>
         </span>
       </label>
       <div id="dynThreshControls" hidden>
@@ -184,7 +183,6 @@
         </span>
         <span>
           <strong>Centrage auto</strong>
-          <small>La vue suit la moyenne des dernières secondes</small>
         </span>
       </label>
       <div id="autoCenterControls" hidden>
@@ -203,7 +201,6 @@
         </span>
         <span>
           <strong>Zoom auto</strong>
-          <small>L’échelle verticale suit l’amplitude des données visibles</small>
         </span>
       </label>
       <div id="autoZoomControls" hidden>
@@ -225,7 +222,6 @@
         </span>
         <span>
           <strong>Entrée du toucher</strong>
-          <small>Le toucher se superpose au végétal, qui continue de jouer. La durée règle son apparition et sa disparition. Sans impulsions, tous les sons s’éteignent de la même façon.</small>
         </span>
       </label>
       <div id="zoneXfadeControls">
@@ -308,6 +304,15 @@
 </div>
 
 <div class="sheet-backdrop" id="sheetBackdrop"></div>
+<div class="sheet-backdrop pick-backdrop" id="pickBackdrop"></div>
+<section class="sheet pick-sheet" id="pickSheet" role="dialog" aria-modal="true" aria-labelledby="pickTitle" aria-hidden="true" hidden>
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <div class="sheet-head">
+    <h3 id="pickTitle">Instrument</h3>
+    <button type="button" class="sheet-close" aria-label="Fermer"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+  </div>
+  <div class="sheet-body" id="pickBody"></div>
+</section>
 <section class="sheet" id="instSheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" aria-hidden="true" hidden>
   <div class="sheet-grab" aria-hidden="true"><span></span></div>
   <div class="sheet-head">
@@ -320,7 +325,7 @@
 <script src="faust-player.js?v=stable10"></script>
 <script src="default-config.js?v=d9"></script>
 <script src="quantizer.js?v=q7"></script>
-<script src="script.js?v=map58"></script>
+<script src="script.js?v=map60"></script>
 <script>
 if ("serviceWorker" in navigator && window.isSecureContext) {
   window.addEventListener("load", function () {

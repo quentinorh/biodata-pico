@@ -3787,3 +3787,43 @@ body.settings-open.panel-role #aboutToggle {
   /* Dans la ligne du haut, le max reste visible panneau ouvert. */
   body.settings-open .top-stats .stat-max { opacity: 1; }
 }
+
+/* ═══ Ligne de mesures (mobile) : grille à colonnes fixes ═══
+   La propriété « font » raccourcie remettait les chiffres en largeur variable :
+   on rétablit les chiffres tabulaires après elle, et chaque valeur a sa largeur. */
+@media (max-width: 640px) {
+  .top-stats {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    column-gap: 12px;
+    align-items: baseline;
+  }
+
+  .top-stats .stats {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    column-gap: 12px;
+  }
+
+  .top-stats .stat-extremum,
+  .top-stats .stat .value,
+  .top-stats .stat .label {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  .top-stats .stat-extremum,
+  .top-stats .stat .value {
+    display: inline-block;
+    text-align: right;
+  }
+
+  /* Largeurs prévues pour la valeur la plus longue de chaque mesure. */
+  .top-stats .stat-max #max,
+  .top-stats .stat-min #min { display: inline-block; min-width: 5ch; text-align: right; }
+  .top-stats .stat:nth-child(1) .value { min-width: 5ch; }
+  .top-stats .stat:nth-child(2) .value { min-width: 5ch; }
+  .top-stats .stat:nth-child(3) .value { min-width: 6.5ch; }
+}

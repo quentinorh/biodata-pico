@@ -4913,8 +4913,8 @@ function linkedLabel(role) {
 function roleSheetHtml(role) {
   const r = routing[role];
   const t01 = smoothedT01[role] ?? roleLinkT01(role);
-  let html = `<div class="sheet-sec role-panel" data-role="${role}">${instSelectHtml(r.inst, true)}</div>`;
-  html += `<div class="sheet-sec role-panel" data-role="${role}">`;
+  let html = `<div class="sheet-sec role-panel" data-role="${role}">${instTilesHtml(role)}</div>`;
+  html += `<div class="sheet-sec sheet-card role-panel" data-role="${role}">`;
   html += instParams(r.inst).map((p) => {
     const live = roleParamValue(role, p.id, t01);
     const step = (p.max - p.min) > 20 ? 1 : 0.01;
@@ -4936,9 +4936,23 @@ function roleSheetHtml(role) {
   return html;
 }
 
+// Choix de l'instrument en tuiles (comme les sons de Breathwrk) : tout se voit d'un coup d'œil.
+function instTilesHtml(role) {
+  const r = routing[role];
+  return `<div class="inst-tiles" role="radiogroup" aria-label="Instrument">` + Object.keys(INST).map((id) => {
+    const used = roleUsesInst(id);
+    const other = used && used !== role ? `<span class="inst-tile-sub">${ROLE_META[used].title}</span>` : "";
+    return `<button type="button" class="inst-tile" role="radio" data-inst="${id}" aria-checked="${id === r.inst}">` +
+      `<span class="inst-tile-name">${INST[id].label}</span>${other}</button>`;
+  }).join("") + `</div>`;
+}
+
 function bindRoleSheet(body, role) {
   const r = routing[role];
-  body.querySelector("#roleInst")?.addEventListener("change", (e) => setRoleInstrument(role, e.target.value));
+  body.querySelector(".inst-tiles")?.addEventListener("click", (e) => {
+    const tile = e.target.closest(".inst-tile");
+    if (tile && tile.dataset.inst !== routing[role].inst) setRoleInstrument(role, tile.dataset.inst);
+  });
   body.querySelectorAll("input[data-link-param]").forEach((box) => {
     box.addEventListener("change", () => setRoleParam(role, box.checked ? box.dataset.linkParam : null));
   });

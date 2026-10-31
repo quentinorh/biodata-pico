@@ -3059,3 +3059,77 @@ body:not(.settings-open) .role-pip.is-off { display: flex; opacity: .45; }
 .role-panel .param-row input[type=range]::-moz-range-thumb { background: #f4f6f8; }
 .role-panel .param-row.is-linked input[type=range]::-webkit-slider-thumb { background: rgb(var(--ctl-rgb)); }
 .role-panel .param-row.is-linked input[type=range]::-moz-range-thumb { background: rgb(var(--ctl-rgb)); }
+
+/* ═══ Benchmark Mobbin : réglages groupés en carte, instrument en tuiles ═══ */
+.sheet-card,
+.mix-panel .settings-mix {
+  padding: 4px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .045);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+
+.sheet-card .param-row,
+.mix-panel .settings-mix .param-row {
+  margin: 0;
+  padding: 10px 0 4px;
+}
+
+.sheet-card .param-row + .param-row,
+.mix-panel .settings-mix .param-row + .param-row {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07);
+}
+
+.mix-panel .settings-mix { gap: 0; }
+
+.inst-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inst-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .045);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+  color: #c8cdd6;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .12s var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.inst-tile:active { transform: scale(.96); }
+
+.inst-tile-name {
+  font-size: 13px;
+  line-height: 1.2;
+  letter-spacing: -.15px;
+  text-wrap: balance;
+}
+
+.inst-tile-sub {
+  font: 10px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  color: #6d778c;
+}
+
+.inst-tile[aria-checked="true"] {
+  color: #fff;
+  background: rgba(var(--ctl-rgb), .16);
+  box-shadow: inset 0 0 0 1.5px rgb(var(--ctl-rgb));
+}
+
+@media (max-width: 640px) {
+  .inst-tile-name { font-size: 14px; }
+}
+
+@media (min-width: 641px) {
+  .inst-inline .inst-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

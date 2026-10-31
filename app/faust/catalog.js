@@ -58,7 +58,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.374
     },
     {
       "id": "harmonic-series",
@@ -85,7 +85,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.228
     },
     {
       "id": "melodic-bottle",
@@ -161,7 +161,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.322
     },
     {
       "id": "melodic-soprano",
@@ -237,7 +237,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.228
     },
     {
       "id": "moon-strings",
@@ -313,7 +313,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "density",
-      "level": 0.38
+      "level": 1.14
     },
     {
       "id": "ocean-theme",
@@ -382,7 +382,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.369
     },
     {
       "id": "rain-stick",
@@ -418,7 +418,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "density",
-      "level": 0.38
+      "level": 1.14
     },
     {
       "id": "resonant-drone",
@@ -494,7 +494,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.263
     },
     {
       "id": "sine-drone",
@@ -529,7 +529,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.232
     },
     {
       "id": "soprano-drone",
@@ -589,7 +589,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.326
     },
     {
       "id": "sparse-bottle",
@@ -641,7 +641,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.619
     },
     {
       "id": "sparse-soprano",
@@ -669,7 +669,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.8
     },
     {
       "id": "vibraphones",
@@ -713,7 +713,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.458
     },
     {
       "id": "vocal-overtones",
@@ -757,7 +757,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.644
     },
     {
       "id": "water-bell",
@@ -801,7 +801,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.875
     },
     {
       "id": "wind-bells",
@@ -862,7 +862,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "density",
-      "level": 0.38
+      "level": 0.554
     },
     {
       "id": "wind-chimes",
@@ -923,7 +923,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "density",
-      "level": 0.38
+      "level": 0.386
     },
     {
       "id": "wind-theme",
@@ -984,7 +984,7 @@ window.FAUST_CATALOG = {
         }
       ],
       "defaultParam": "freq1",
-      "level": 0.38
+      "level": 0.243
     }
   ]
 };

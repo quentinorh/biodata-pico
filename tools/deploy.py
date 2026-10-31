@@ -29,6 +29,8 @@ STATIC_FILES = (
     "style.css",
     "script.js",
     "faust-player.js",
+    "quantizer.js",
+    "default-config.js",
     "sw.js",
     "manifest.webmanifest",
     "favicon.ico",
@@ -294,11 +296,17 @@ def too_small(total, needed):
 
 def prepare_fs(port, needed):
     total, free = fs_info(port)
-    if total is not None:
-        print("Flash Pico : %d Ko au total, %d Ko libres" % (total // 1024, free // 1024))
-        if total < needed + FLASH_HEADROOM:
-            too_small(total, needed)
-    if free is None or free < needed + FLASH_HEADROOM:
+    if total is None:
+        # Pico injoignable (port occupé, mpremote en échec) : ne jamais
+        # formater à l'aveugle, settings.json serait perdu.
+        raise SystemExit(
+            "Impossible de lire la flash du Pico. Fermez Thonny ou tout "
+            "terminal série, rebranchez le Pico et relancez."
+        )
+    print("Flash Pico : %d Ko au total, %d Ko libres" % (total // 1024, free // 1024))
+    if total < needed + FLASH_HEADROOM:
+        too_small(total, needed)
+    if free < needed + FLASH_HEADROOM:
         format_fs(port)
         total, free = fs_info(port)
         if total is not None:
@@ -352,6 +360,13 @@ def main():
         help="Ne recopier que le firmware et les fichiers principaux de app",
     )
     args = parser.parse_args()
+    try:
+        import mpremote  # noqa: F401
+    except ImportError:
+        raise SystemExit(
+            "mpremote manque pour %s. Installez-le :\n    %s -m pip install mpremote"
+            % (sys.executable, sys.executable)
+        )
     port = args.port or find_pico_port()
     if port:
         print("Pico sur", port)

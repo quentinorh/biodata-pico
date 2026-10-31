@@ -6,6 +6,8 @@ var SHELL = [
   "./style.css",
   "./script.js",
   "./faust-player.js",
+  "./quantizer.js",
+  "./default-config.js",
   "./faust/catalog.js",
   "./manifest.webmanifest",
   "./favicon.ico",

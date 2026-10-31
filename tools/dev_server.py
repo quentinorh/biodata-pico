@@ -4,6 +4,8 @@ Sert le dossier ``app`` et reproduit ``/api/stream``, ``/api/data``,
 ``/api/status`` et ``/api/settings`` avec un signal biodata synthétique à 50 Hz.
 
     python tools/dev_server.py        puis http://localhost:8080
+    python tools/dev_server.py --replay biodata-....json
+                                      rejoue en boucle un enregistrement du datalogger
 """
 
 import argparse
@@ -72,6 +74,31 @@ class FakeSensor:
                 points.append(self.periods[index])
                 index = (index + 1) % RING_SIZE
             return newest, points
+
+
+class ReplaySensor(FakeSensor):
+    """Rejoue un fichier du datalogger, en boucle, au rythme des périodes enregistrées."""
+
+    def __init__(self, path):
+        super().__init__()
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        samples = data.get("samples", []) if isinstance(data, dict) else []
+        self.recorded = [
+            int(v)
+            for sample in samples
+            for v in (sample.get("intervals_us") or [])
+            if isinstance(v, (int, float)) and v > 0
+        ]
+        if not self.recorded:
+            raise SystemExit("Aucune période dans " + path)
+        self.cursor = 0
+        self.last_period = self.recorded[0]
+
+    def _next_period(self, now):
+        period = self.recorded[self.cursor]
+        self.cursor = (self.cursor + 1) % len(self.recorded)
+        return period
 
 
 sensor = FakeSensor()
@@ -358,7 +385,11 @@ class Handler(SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--replay", help="fichier JSON exporté par le datalogger")
     args = parser.parse_args()
+    if args.replay:
+        sensor = ReplaySensor(args.replay)
+        print("Rejoue %d périodes de %s" % (len(sensor.recorded), args.replay))
     sensor.start()
     print("Interface : http://localhost:%d" % args.port)
     ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()

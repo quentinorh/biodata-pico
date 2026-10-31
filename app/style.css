@@ -3733,3 +3733,57 @@ body.settings-open.panel-role #aboutToggle {
   .settings-body,
   .sheet-body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
+
+/* ═══ En-tête d'instrument : une seule surface, interrupteur à droite ═══ */
+.track-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 0 14px 0 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.track-head .inst-open {
+  min-height: 60px;
+  padding: 10px 0 10px 10px;
+  gap: 12px;
+  border-radius: 12px 0 0 12px;
+  background: none;
+  box-shadow: none;
+}
+
+.track-head .inst-open:hover { background: none; }
+.track-head .inst-open:active { transform: none; }
+.track-head .inst-open:active .track-icon { transform: scale(.96); }
+.track-head .inst-open-chev { display: none; }
+
+.track-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(var(--ctl-rgb), .12);
+  color: rgb(var(--ctl-rgb));
+  transition: transform .12s var(--ease-out);
+}
+
+.track-icon svg { width: 22px; height: 22px; }
+.role-panel[data-role="vegetal"] .track-icon svg { width: 24px; height: 24px; }
+
+.track-head .inst-open-name { font-size: 15px; font-weight: 600; letter-spacing: -.2px; }
+.track-head .inst-open-sub { font-size: var(--t-value); color: var(--ink-3); }
+
+.track-head .switch { flex: 0 0 auto; }
+
+/* Piste éteinte : la vignette passe au gris, le nom reste lisible. */
+.track-head:has(input:not(:checked)) .track-icon { background: var(--surface-4); color: var(--ink-4); }
+
+@media (max-width: 640px) {
+  /* Dans la ligne du haut, le max reste visible panneau ouvert. */
+  body.settings-open .top-stats .stat-max { opacity: 1; }
+}

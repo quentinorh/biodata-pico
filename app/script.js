@@ -2176,12 +2176,12 @@ function renderRolePanel() {
   const r = routing[role];
   const t01 = smoothedT01[role] ?? roleLinkT01(role);
   let html = `<div class="role-panel" data-role="${role}">`;
-  html += `<div class="inst-row">`;
+  html += `<div class="inst-row track-head">`;
+  html += instOpenHtml(INST[r.inst] ? INST[r.inst].label : "—", linkedLabel(role), r.on, "instOpen", role);
   html += `<label class="switch" title="Activer la piste">`;
   html += `<input type="checkbox" id="roleEnabled" ${r.on ? "checked" : ""} aria-label="Activer la piste">`;
   html += `<span class="switch-ui"></span>`;
   html += `</label>`;
-  html += instOpenHtml(INST[r.inst] ? INST[r.inst].label : "—", linkedLabel(role), r.on);
   html += `</div>`;
   html += trackVolumeHtml(ROLE_VOL[role]);
   html += `<div class="role-settings${r.on ? "" : " is-disabled"}"${r.on ? "" : " inert"}>`;
@@ -4583,9 +4583,9 @@ function renderQuantPanel() {
   const labels = Quantizer.LABELS[qzMode()];
   const th = q.thresholds;
   let html = `<section class="qz role-panel" id="qz" data-role="quant">`;
-  html += `<div class="inst-row">`;
+  html += `<div class="inst-row track-head">`;
+  html += instOpenHtml(Quantizer.TIMBRES[q.timbre].label, qzSoundSummary(), true, "qzSoundOpen", "quant");
   html += `<label class="switch" title="Activer le quantizer"><input type="checkbox" id="quantEnabled"${G.quantOn ? " checked" : ""} aria-label="Activer le quantizer"><span class="switch-ui"></span></label>`;
-  html += instOpenHtml(Quantizer.TIMBRES[q.timbre].label, qzSoundSummary(), true, "qzSoundOpen");
   html += `</div>`;
   html += `<div class="track-volume"><div class="param-row qz-level"><div class="param-head"><span class="param-label">Volume</span></div>`;
   html += `<input type="range" id="qzLevel" min="0" max="100" step="1" value="${q.level}"><span class="param-val">${Math.round(q.level)} %</span></div></div>`;
@@ -4887,8 +4887,12 @@ if (window.Quantizer) {
 // Un seul sheet pour les trois : la piste Végétal, la piste Toucher, et le son du quantizer.
 var sheetKind = "";
 
-function instOpenHtml(name, sub, enabled, id) {
-  return `<button type="button" class="inst-open" id="${id || "instOpen"}"${enabled ? "" : " disabled"}>` +
+// En-tête d'instrument (benchmark Spotify / Garmin) : vignette au picto de la piste, nom,
+// paramètre piloté ; l'interrupteur vit à droite, dans la même ligne.
+function instOpenHtml(name, sub, enabled, id, role) {
+  const glyph = role ? document.querySelector(`.role-pip[data-role="${role}"] svg`) : null;
+  const icon = glyph ? `<span class="track-icon" aria-hidden="true">${glyph.outerHTML}</span>` : "";
+  return `<button type="button" class="inst-open" id="${id || "instOpen"}"${enabled ? "" : " disabled"}>` + icon +
     `<span class="inst-open-text"><span class="inst-open-name">${name}</span><span class="inst-open-sub">${sub}</span></span>` +
     `<svg class="inst-open-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>`;
 }
@@ -5249,6 +5253,22 @@ document.addEventListener("input", (e) => {
       anchor.after(max, min);
       home.append(stats);
     }
+  };
+  apply();
+  mq.addEventListener ? mq.addEventListener("change", apply) : mq.addListener(apply);
+})();
+
+// Sur mobile, le dock sort de la barre du haut : la barre forme sa propre couche (z-index 40),
+// et le dock resterait au-dessus des bottom sheets quel que soit son z-index.
+(function placeDock() {
+  const mq = window.matchMedia ? window.matchMedia("(max-width: 640px)") : null;
+  const pips = $("rolePips");
+  if (!mq || !pips) return;
+  const anchor = document.createComment("dock");
+  pips.before(anchor);
+  const apply = () => {
+    if (mq.matches) document.body.appendChild(pips);
+    else anchor.after(pips);
   };
   apply();
   mq.addEventListener ? mq.addEventListener("change", apply) : mq.addListener(apply);

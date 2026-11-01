@@ -5,3 +5,7 @@
 
 # Clones et outils tiers : chacun a son propre dépôt, ou ne sert qu'à compiler.
 tools/_vendor/
+
+# Système et réglages locaux de l'éditeur
+.DS_Store
+.claude/

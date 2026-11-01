@@ -16,7 +16,8 @@
 <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=map24">
+<link rel="preload" href="inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css?v=map113">
 </head>
 <body>
 
@@ -26,34 +27,26 @@
 <div class="threshold-label lo" id="threshLoLabel"></div>
 <div class="chrome-top">
   <div class="toolbar">
-    <button type="button" class="tool-btn" id="settingsToggle" onclick="toggleSettings()" title="R&eacute;glages">
+    <button type="button" class="tool-btn" id="settingsToggle" onclick="toggleSettings()" title="Réglages" aria-label="Réglages">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2.2" fill="currentColor"/><circle cx="15" cy="12" r="2.2" fill="currentColor"/><circle cx="8" cy="17" r="2.2" fill="currentColor"/></svg>
     </button>
-    <button type="button" class="tool-btn" id="infoToggle" onclick="toggleInfo()" title="Paramètres généraux" aria-label="Paramètres généraux" inert aria-hidden="true">
-      <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
-    </button>
-    <button type="button" class="tool-btn" id="filesToggle" onclick="toggleFiles()" title="Fichier de réglages" aria-label="Fichier de réglages" inert aria-hidden="true">
+    <button type="button" class="tool-btn" id="filesToggle" onclick="toggleFiles()" title="Présets" aria-label="Présets" inert aria-hidden="true">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" d="M7.2 3.4h6.6L18.6 8.2V19.2a1.4 1.4 0 0 1-1.4 1.4H7.2a1.4 1.4 0 0 1-1.4-1.4V4.8a1.4 1.4 0 0 1 1.4-1.4z"/><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" d="M13.6 3.6v4.8h4.8"/></svg>
     </button>
-    <button type="button" class="tool-btn" id="aboutToggle" onclick="toggleAbout()" title="À propos" aria-label="À propos" inert aria-hidden="true">
+    <button type="button" class="tool-btn" id="aboutToggle" onclick="toggleAbout()" title="Infos" aria-label="Infos" inert aria-hidden="true">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 11.1V16"/><circle cx="12" cy="8.05" r="1.05" fill="currentColor"/></svg>
     </button>
-    <div class="role-pips" id="rolePips" role="tablist" aria-label="Piste" inert aria-hidden="true">
-      <button type="button" class="tool-btn role-tab role-pip active" data-role="vegetal" role="tab" aria-selected="true" title="Végétal" aria-label="Végétal">
-        <svg viewBox="14 28 80 87" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round" d="M53.5,31.3c-5-0.2-10.5,2.4-12.5,8.1c-5.4-1.1-12.8,2.7-11.5,11.2c-5.5-0.2-11.7,7.3-8,14.4C18.8,67.4,19,77.5,28,78.2c1.1,8.1,10.7,10.9,16,3.6c0.3,0.5,1.9,1.3,4.5,0.6c0.5,1.2,1.5,4.4,1.5,12c-0.1,10.4-1.3,17.2-1.3,17.2h13c0,0-0.8-5.4-1.4-8.4c-0.6-3-0.6-8.3-0.8-10.6c-0.1-2.4,0.8-3.8,0.7-6.8c0-2.4,1.1-3.7,2.3-4.4c2.5,5.5,15.9,4.9,18.1-2.2c4.6,0.1,9.2-5,6.2-10.8c1.1-1.3,3.8-9.4-4.4-13.4c0.7-6.1-2.6-8.6-6-8.9c0.6-5.3-6-12.4-13.8-8.9C61,33.4,57.4,31.5,53.5,31.3z"/></svg>
+    <span id="pipAnchor" hidden></span>
+    <div class="role-pips" id="rolePips" role="tablist" aria-label="Piste">
+      <span class="pip-title" id="pipTitle" hidden></span>
+      <button type="button" class="tool-btn role-tab role-pip quant-btn" data-role="quant" id="quantToggle" role="tab" aria-selected="false" title="Rythme" aria-label="Rythme">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="48.4" fill="#161922" stroke="currentColor" stroke-width="2.6"/><rect x="35.3" y="35.2" width="29.4" height="29.7" fill="currentColor"/></svg>
       </button>
-      <button type="button" class="tool-btn role-tab role-pip" data-role="interaction" role="tab" aria-selected="false" title="Toucher" aria-label="Toucher">
-        <svg viewBox="1.2 3.4 19.4 17.8" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" d="M7.9,12.2V7.4c0-0.7,0.6-1.3,1.4-1.3c0.8,0,1.4,0.6,1.4,1.3v5.1 M10.7,11.6v-5c0-0.7,0.6-1.3,1.4-1.3
-          c0.8,0,1.4,0.6,1.4,1.3v5.2 M13.6,12V8.8c0-0.7,0.6-1.3,1.4-1.3c0.7,0,1.3,0.6,1.3,1.3V15c0,2.9-2,4.7-4.9,4.7h-0.7
-          c-3.2,0-5.6-2.1-5.6-5.3v-1.6v-0.4v-1.3c0-0.7,0.6-1.3,1.4-1.3s1.4,0.6,1.4,1.3v1.1"/></svg>
+      <button type="button" class="tool-btn role-tab role-pip active" data-role="vegetal" role="tab" aria-selected="true" title="Plante" aria-label="Plante">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="48.4" fill="#161922" stroke="currentColor" stroke-width="2.6"/><circle cx="50" cy="50" r="17.2" fill="currentColor"/></svg>
       </button>
-      <button type="button" class="tool-btn role-tab role-pip" data-role="ambiance" role="tab" aria-selected="false" title="Ambiance" aria-label="Ambiance">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
-          <path class="st0" d="M4,6.9c1.8-1.4,3.5-1.4,5.4,0s3.5,1.4,5.4,0s3.5-1.4,5.4,0"/>
-          <path class="st0" d="M4,10.5c1.8-1.4,3.5-1.4,5.4,0s3.5,1.4,5.4,0s3.5-1.4,5.4,0"/>
-          <path class="st0" d="M4,14.1c1.8-1.4,3.5-1.4,5.4,0s3.5,1.4,5.4,0s3.5-1.4,5.4,0"/>
-          <path class="st0" d="M4,17.8c1.8-1.4,3.5-1.4,5.4,0s3.5,1.4,5.4,0s3.5-1.4,5.4,0"/>
-        </g></svg>
+      <button type="button" class="tool-btn role-tab role-pip" data-role="interaction" role="tab" aria-selected="false" title="Interaction" aria-label="Interaction">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="48.4" fill="#161922" stroke="currentColor" stroke-width="2.6"/><path d="M50 31.9 68 62.3H32Z" fill="currentColor"/></svg>
       </button>
     </div>
     <span id="recTimer" class="toolbar-rec-timer" hidden></span>
@@ -61,23 +54,33 @@
 </div>
 
 <div class="span-controls" role="group" aria-label="Vue du graphe">
-  <button type="button" class="tool-btn" id="spanPlus" onclick="nudgePointSpacing(1)" title="Écarter les points" aria-label="Écarter les points">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 6v12M6 12h12"/></svg>
+  <button type="button" class="tool-btn" id="zoomToggle" aria-expanded="false" aria-controls="zoomPop" title="Zoom" aria-label="Zoom">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M15.2 15.2 20.2 20.2"/></svg>
   </button>
-  <button type="button" class="tool-btn" id="spanMinus" onclick="nudgePointSpacing(-1)" title="Rapprocher les points" aria-label="Rapprocher les points">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M6 12h12"/></svg>
-  </button>
+  <div class="zoom-pop" id="zoomPop" hidden>
+    <label class="zoom-tag zoom-tag-v">
+      <input type="range" id="zoomV" class="zoom-range zoom-range-v" min="0" max="100" value="40" aria-label="Zoom vertical">
+    </label>
+    <label class="zoom-tag zoom-tag-h">
+      <input type="range" id="zoomH" class="zoom-range zoom-range-h" min="0" max="100" value="40" aria-label="Zoom horizontal">
+    </label>
+  </div>
   <button type="button" class="tool-btn" id="viewRecenter" onclick="recenterView()" title="Recentrer sur les dernières impulsions" aria-label="Recentrer">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.4" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3.2v2.6M12 18.2v2.6M3.2 12h2.6M18.2 12h2.6"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
   </button>
 </div>
 
+<div class="top-stats" id="topStats" aria-label="Mesures"></div>
 <div class="stat-extremum stat-max" title="Maximum">
   <span id="max">&mdash;</span><span class="unit"> µs</span>
 </div>
 <div class="stat-extremum stat-min" title="Minimum">
   <span id="min">&mdash;</span><span class="unit"> µs</span>
 </div>
+<button type="button" class="sound-chip" id="soundChip" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 9.5h3.2L12 5.6v12.8l-4.8-3.9H4z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M15.5 9.2a4 4 0 0 1 0 5.6M18.2 6.6a7.6 7.6 0 0 1 0 10.8"/></svg>
+  Activer le son
+</button>
 <div class="settings-backdrop" id="settingsBackdrop" onclick="closeSettings()"></div>
 
 <div class="bottom-right">
@@ -99,28 +102,172 @@
 
 <div class="settings-panel" id="settingsPanel" role="dialog" aria-label="Réglages" aria-modal="true" aria-hidden="true">
   <div class="settings-head">
-    <div class="settings-head-spacer" aria-hidden="true"></div>
-    <div class="settings-mix">
-      <div class="param-row mix-cell">
-        <div class="param-head">
-          <label for="param-masterVol" class="param-label">VOL</label>
-        </div>
-        <input id="param-masterVol" type="range" min="0" max="100" value="50" data-param="masterVol">
-        <span class="param-val">50%</span>
-      </div>
-      <div class="param-row mix-cell">
-        <div class="param-head">
-          <label for="param-bpm" class="param-label" title="60 = vitesse d'origine du patch">BPM</label>
-        </div>
-        <input id="param-bpm" type="range" min="20" max="160" value="60" data-param="bpm">
-        <span class="param-val">60</span>
+    <div class="sheet-grab" aria-hidden="true"><span></span></div>
+    <span class="tab-title" id="tabTitle" hidden>Réglages</span>
+    <div class="head-switch" id="headSwitch">
+      <div class="head-switch-icons" id="headIconSlot"></div>
+      <div class="head-switch-names">
+        <button type="button" class="head-name" data-role="quant">Rythme</button>
+        <button type="button" class="head-name" data-role="vegetal">Plante</button>
+        <button type="button" class="head-name" data-role="interaction">Interaction</button>
       </div>
     </div>
+    <div class="settings-head-spacer" aria-hidden="true"></div>
+    <nav class="track-nav" id="trackNav" hidden aria-label="Piste">
+      <button type="button" class="track-nav-btn" data-view="params">paramètres</button>
+      <button type="button" class="track-nav-btn" data-role="quant">Rythme</button>
+      <button type="button" class="track-nav-btn" data-role="vegetal">plante</button>
+      <button type="button" class="track-nav-btn" data-role="interaction">Interaction</button>
+    </nav>
   </div>
 
   <div class="settings-body">
     <div id="rolePanel"></div>
+    <div id="quantPanel" hidden></div>
     <div id="infoPanel" class="info-body" hidden>
+    <section class="settings-section">
+      <h3>Son</h3>
+      <div class="settings-group">
+        <div class="param-row">
+          <div class="param-head">
+            <label for="param-masterVol" class="param-label">Volume</label>
+          </div>
+          <input id="param-masterVol" type="range" min="0" max="100" value="50" data-param="masterVol">
+          <span class="param-val">50%</span>
+        </div>
+        <div class="param-row">
+          <div class="param-head">
+            <label for="param-bpm" class="param-label" title="60 = vitesse d'origine du patch">BPM</label>
+          </div>
+          <input id="param-bpm" type="range" min="20" max="160" value="50" data-param="bpm">
+          <span class="param-val">50</span>
+        </div>
+      </div>
+    </section>
+    <section class="settings-section">
+      <h3>Réverbe</h3>
+      <div class="settings-group">
+        <div class="settings-line">
+          <label for="reverbPreset">Type</label>
+          <select class="inst-select" id="reverbPreset">
+            <option value="">Aucune</option>
+          </select>
+        </div>
+        <div id="reverbControls" class="settings-nest" hidden>
+          <div class="param-row">
+            <div class="param-head">
+              <label for="param-reverbMix" class="param-label">Niveau</label>
+            </div>
+            <input id="param-reverbMix" type="range" min="0" max="100" value="35" data-general="reverbMix">
+            <span class="param-val">35 %</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="settings-section">
+      <h3>Transition</h3>
+      <div class="settings-group">
+        <label class="toggle-row">
+          <span><strong>Entrée de l’interaction</strong></span>
+          <span class="switch">
+            <input type="checkbox" id="zoneXfadeEnabled" checked>
+            <span class="switch-ui"></span>
+          </span>
+        </label>
+        <div id="zoneXfadeControls" class="settings-nest">
+          <div class="param-row">
+            <div class="param-head">
+              <label for="param-zoneXfade" class="param-label">Durée</label>
+            </div>
+            <input id="param-zoneXfade" type="range" min="0" max="5000" step="50" value="750" data-general="zoneXfadeMs">
+            <span class="param-val">750 ms</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="settings-section">
+      <h3>Suivi automatique</h3>
+      <div class="settings-group">
+        <label class="toggle-row">
+          <span><strong>Seuils dynamiques</strong></span>
+          <span class="switch">
+            <input type="checkbox" id="dynThreshEnabled">
+            <span class="switch-ui"></span>
+          </span>
+        </label>
+        <div id="dynThreshControls" class="settings-nest" hidden>
+          <div class="param-row">
+            <div class="param-head">
+              <label for="param-threshMargin" class="param-label">Marge</label>
+            </div>
+            <input id="param-threshMargin" type="range" min="4" max="300" value="75" data-general="threshMarginPct">
+            <span class="param-val">18 %</span>
+          </div>
+          <div class="param-row">
+            <div class="param-head">
+              <label for="param-threshSmooth" class="param-label">Lissage</label>
+            </div>
+            <input id="param-threshSmooth" type="range" min="300" max="20000" step="100" value="2500" data-general="threshSmoothMs" title="Centre des seuils : moyenne des X dernières secondes">
+            <span class="param-val">2,5 s</span>
+          </div>
+        </div>
+      </div>
+      <div class="settings-group">
+        <label class="toggle-row">
+          <span><strong>Centrage auto</strong></span>
+          <span class="switch">
+            <input type="checkbox" id="autoCenterEnabled">
+            <span class="switch-ui"></span>
+          </span>
+        </label>
+        <div id="autoCenterControls" class="settings-nest" hidden>
+          <div class="param-row">
+            <div class="param-head">
+              <label for="param-zoomSmooth" class="param-label">Lissage</label>
+            </div>
+            <input id="param-zoomSmooth" type="range" min="200" max="20000" step="100" value="600" data-general="zoomSmoothMs" title="Centrage sur la moyenne des X dernières secondes">
+            <span class="param-val">0,6 s</span>
+          </div>
+        </div>
+      </div>
+      <div class="settings-group">
+        <label class="toggle-row">
+          <span><strong>Zoom auto</strong></span>
+          <span class="switch">
+            <input type="checkbox" id="autoZoomEnabled">
+            <span class="switch-ui"></span>
+          </span>
+        </label>
+        <div id="autoZoomControls" class="settings-nest" hidden>
+          <div class="param-row">
+            <div class="param-head">
+              <label for="param-zoomMargin" class="param-label">Marge</label>
+            </div>
+            <input id="param-zoomMargin" type="range" min="2" max="300" value="250" data-general="zoomMarginPct" title="Marge verticale de chaque côté du zoom">
+            <span class="param-val">8 %</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="settings-section">
+      <h3>Affichage</h3>
+      <div class="settings-group">
+        <label class="toggle-row">
+          <span><strong>Animations du graphe</strong></span>
+          <span class="switch">
+            <input type="checkbox" id="graphAnimEnabled" checked>
+            <span class="switch-ui"></span>
+          </span>
+        </label>
+        <label class="toggle-row">
+          <span><strong>Plein écran</strong></span>
+          <span class="switch">
+            <input type="checkbox" id="fullscreenToggle">
+            <span class="switch-ui"></span>
+          </span>
+        </label>
+      </div>
+    </section>
     <section class="settings-section">
       <h3>Capteur</h3>
       <div class="settings-card">
@@ -133,109 +280,8 @@
     </section>
     <section class="settings-section">
       <h3>Datalogger</h3>
-      <button type="button" class="settings-btn" id="recToggle" onclick="toggleRecord()">Enregistrer 60 s</button>
-    </section>
-    <section class="settings-section">
-      <h3>Affichage</h3>
-      <label class="toggle-row">
-        <span class="switch">
-          <input type="checkbox" id="graphAnimEnabled" checked>
-          <span class="switch-ui"></span>
-        </span>
-        <span>
-          <strong>Animations du graphe</strong>
-          <small>Ondulations autour des notes. À couper si le téléphone ralentit</small>
-        </span>
-      </label>
-      <button type="button" class="settings-btn" id="fullscreenToggle" onclick="toggleFullscreen()" aria-pressed="false">Plein écran</button>
-    </section>
-    <section class="settings-section">
-      <h3>Suivi automatique</h3>
-      <label class="toggle-row">
-        <span class="switch">
-          <input type="checkbox" id="dynThreshEnabled">
-          <span class="switch-ui"></span>
-        </span>
-        <span>
-          <strong>Seuils dynamiques</strong>
-          <small>Les seuils suivent le signal, avec une marge et un lissage</small>
-        </span>
-      </label>
-      <div id="dynThreshControls" hidden>
-        <div class="param-row">
-          <div class="param-head">
-            <label for="param-threshMargin" class="param-label">Marge</label>
-          </div>
-          <input id="param-threshMargin" type="range" min="4" max="100" value="18" data-general="threshMarginPct">
-          <span class="param-val">18 %</span>
-        </div>
-        <div class="param-row">
-          <div class="param-head">
-            <label for="param-threshSmooth" class="param-label">Lissage</label>
-          </div>
-          <input id="param-threshSmooth" type="range" min="300" max="20000" step="100" value="2500" data-general="threshSmoothMs" title="Centre des seuils : moyenne des X dernières secondes">
-          <span class="param-val">2,5 s</span>
-        </div>
-      </div>
-      <label class="toggle-row">
-        <span class="switch">
-          <input type="checkbox" id="autoCenterEnabled">
-          <span class="switch-ui"></span>
-        </span>
-        <span>
-          <strong>Centrage auto</strong>
-          <small>La vue suit la moyenne des dernières secondes</small>
-        </span>
-      </label>
-      <div id="autoCenterControls" hidden>
-        <div class="param-row">
-          <div class="param-head">
-            <label for="param-zoomSmooth" class="param-label">Lissage</label>
-          </div>
-          <input id="param-zoomSmooth" type="range" min="200" max="20000" step="100" value="600" data-general="zoomSmoothMs" title="Centrage sur la moyenne des X dernières secondes">
-          <span class="param-val">0,6 s</span>
-        </div>
-      </div>
-      <label class="toggle-row">
-        <span class="switch">
-          <input type="checkbox" id="autoZoomEnabled">
-          <span class="switch-ui"></span>
-        </span>
-        <span>
-          <strong>Zoom auto</strong>
-          <small>L’échelle verticale suit l’amplitude des données visibles</small>
-        </span>
-      </label>
-      <div id="autoZoomControls" hidden>
-        <div class="param-row">
-          <div class="param-head">
-            <label for="param-zoomMargin" class="param-label">Marge</label>
-          </div>
-          <input id="param-zoomMargin" type="range" min="2" max="120" value="8" data-general="zoomMarginPct" title="Marge verticale de chaque côté du zoom">
-          <span class="param-val">8 %</span>
-        </div>
-      </div>
-    </section>
-    <section class="settings-section">
-      <h3>Transition sonore</h3>
-      <label class="toggle-row">
-        <span class="switch">
-          <input type="checkbox" id="zoneXfadeEnabled" checked>
-          <span class="switch-ui"></span>
-        </span>
-        <span>
-          <strong>Entrée du toucher</strong>
-          <small>Le toucher se superpose au végétal, qui continue de jouer. La durée règle son apparition et sa disparition. Sans impulsions, tous les sons s’éteignent de la même façon.</small>
-        </span>
-      </label>
-      <div id="zoneXfadeControls">
-        <div class="param-row">
-          <div class="param-head">
-            <label for="param-zoneXfade" class="param-label">Durée</label>
-          </div>
-          <input id="param-zoneXfade" type="range" min="80" max="20000" step="50" value="1200" data-general="zoneXfadeMs">
-          <span class="param-val">1,2 s</span>
-        </div>
+      <div class="settings-group settings-group-action">
+        <button type="button" class="settings-btn" id="recToggle" onclick="toggleRecord()">Enregistrer 60 s</button>
       </div>
     </section>
     </div>
@@ -289,9 +335,29 @@
   </div>
 </div>
 
-<script src="faust/catalog.js?v=hashes2"></script>
-<script src="faust-player.js?v=stable5"></script>
-<script src="script.js?v=map28"></script>
+<div class="sheet-backdrop" id="sheetBackdrop"></div>
+<div class="sheet-backdrop pick-backdrop" id="pickBackdrop"></div>
+<section class="sheet pick-sheet" id="pickSheet" role="dialog" aria-modal="true" aria-labelledby="pickTitle" aria-hidden="true" hidden tabindex="-1">
+  <div class="sheet-head">
+    <div class="sheet-grab" aria-hidden="true"><span></span></div>
+    <span class="sheet-inst" id="pickTitle">Instrument</span>
+    <h3 id="pickRole">Piste</h3>
+  </div>
+  <div class="sheet-body" id="pickBody"></div>
+</section>
+<section class="sheet" id="instSheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" aria-hidden="true" hidden tabindex="-1">
+  <div class="sheet-head">
+    <div class="sheet-grab" aria-hidden="true"><span></span></div>
+    <span class="sheet-inst" id="sheetInst">Instrument</span>
+    <h3 id="sheetTitle">Piste</h3>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</section>
+<script src="faust/catalog.js?v=hashes3"></script>
+<script src="faust-player.js?v=stable11"></script>
+<script src="default-config.js?v=d9"></script>
+<script src="quantizer.js?v=q8"></script>
+<script src="script.js?v=map99"></script>
 <script>
 if ("serviceWorker" in navigator && window.isSecureContext) {
   window.addEventListener("load", function () {

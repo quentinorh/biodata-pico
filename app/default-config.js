@@ -3,7 +3,7 @@
  * Changer `baseVersion` les fait recharger une fois sur chaque appareil (et sur la carte),
  * même s'il avait déjà ses propres réglages.
  * Quantizer en Cordes à 2 %, octave −2, une note tous les 8 temps, gamme Hirajōshi,
- * pistes en fond, 50 BPM, réverbe Abbatiale. Végétal (arbre) en Cordes, Toucher (main) en
+ * pistes en fond, 50 BPM, réverbe Ample. Végétal (arbre) en Cordes, Toucher (main) en
  * Contrebasse à 75 %. Seuils dynamiques (marge 75 %), centrage et zoom auto (marge 250 %, zoom auto coupé sur mobile),
  * entrée du toucher 750 ms.
  */
@@ -30,7 +30,7 @@ window.PLANTE_DEFAULT_CONFIG = {
     "zoomSmoothMs": 600,
     "zoneXfadeMs": 750,
     "zoneXfade": true,
-    "reverb": "abbatiale",
+    "reverb": "ample",
     "reverbMix": 74,
     "quantOn": true,
     "quant": {

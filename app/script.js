@@ -835,7 +835,11 @@ function applyConfigObject(parsed, opts) {
     if (Number.isFinite(general.visibleCount)) {
       visibleCount = clamp(Math.round(general.visibleCount), MIN_VISIBLE_POINTS, MAX_VISIBLE_POINTS);
     }
-    if (typeof general.reverb === "string") G.reverb = general.reverb;
+    if (typeof general.reverb === "string") {
+      G.reverb = window.FaustGarden && FaustGarden.reverbId
+        ? FaustGarden.reverbId(general.reverb)
+        : general.reverb;
+    }
     if (typeof general.quantOn === "boolean") G.quantOn = general.quantOn;
     if (general.quant && window.Quantizer) G.quant = Quantizer.sanitize(general.quant);
     if (Number.isFinite(general.reverbMix)) {
@@ -895,6 +899,7 @@ function loadLegacySettings() {
 }
 
 const BASE_VERSION_KEY = "plante-base-version";
+const BASE_DISMISS_KEY = "plante-base-dismissed";
 // Vrai quand la base vient d'être (re)chargée : le Pico reçoit alors cette version.
 let baseFreshlyApplied = false;
 
@@ -1071,6 +1076,8 @@ let localRevision = 0;
 let picoPresets = [];
 let activePresetId = "";
 let pendingDeleteId = "";
+let pendingDeleteBase = false;
+let baseDismissedNow = false;
 let pendingDeleteTimer = null;
 let picoReachable = false;
 
@@ -1187,11 +1194,30 @@ function applyPresetSummary(summary) {
   renderPresetList();
 }
 
+function baseDismissToken() {
+  const config = window.PLANTE_DEFAULT_CONFIG;
+  if (!config) return "";
+  return String(config.baseVersion || "") + "\0" + String(config.title || "");
+}
+
+function baseRowDismissed() {
+  if (baseDismissedNow || !window.PLANTE_DEFAULT_CONFIG) return true;
+  try { return localStorage.getItem(BASE_DISMISS_KEY) === baseDismissToken(); }
+  catch (_) { return false; }
+}
+
+function dismissBaseRow() {
+  baseDismissedNow = true;
+  try { localStorage.setItem(BASE_DISMISS_KEY, baseDismissToken()); }
+  catch (_) { /* quota */ }
+}
+
 function clearPendingDelete() {
   clearTimeout(pendingDeleteTimer);
   pendingDeleteTimer = null;
-  if (!pendingDeleteId) return;
+  if (!pendingDeleteId && !pendingDeleteBase) return;
   pendingDeleteId = "";
+  pendingDeleteBase = false;
   renderPresetList();
 }
 
@@ -1199,9 +1225,7 @@ function renderPresetList() {
   const list = $("cfgPresetList");
   if (!list) return;
   updateSaveLabel();
-  const base = window.PLANTE_DEFAULT_CONFIG
-    ? `<li class="preset-row is-base"><button type="button" class="preset-load" data-preset-base="1">Réglages de base · ${escapeHtml(window.PLANTE_DEFAULT_CONFIG.title || "")}</button></li>`
-    : "";
+  const base = basePresetRow();
   if (!picoReachable) {
     list.innerHTML = base + '<li class="preset-empty">Liste indisponible</li>';
     return;
@@ -1222,6 +1246,39 @@ function renderPresetList() {
       `<button type="button" class="${delClass}" data-preset-id="${id}" aria-label="Supprimer ${title}">${delText}</button>` +
       `</li>`;
   }).join("");
+}
+
+function basePresetRow() {
+  if (baseRowDismissed()) return "";
+  const title = escapeHtml(window.PLANTE_DEFAULT_CONFIG.title || "");
+  const label = "Réglages de base" + (title ? " · " + title : "");
+  const armed = pendingDeleteBase;
+  const delClass = armed ? "preset-delete is-armed" : "preset-delete";
+  const delText = armed ? "Suppr." : "×";
+  return `<li class="preset-row is-base">` +
+    `<button type="button" class="preset-load" data-preset-base="1">${label}</button>` +
+    `<button type="button" class="${delClass}" data-preset-base-delete="1" aria-label="Supprimer ${label}">${delText}</button>` +
+    `</li>`;
+}
+
+function deleteBasePreset() {
+  if (!pendingDeleteBase) {
+    clearTimeout(pendingDeleteTimer);
+    pendingDeleteId = "";
+    pendingDeleteBase = true;
+    renderPresetList();
+    setFilesStatus("Touchez « Suppr. » pour confirmer.", "is-warn");
+    pendingDeleteTimer = setTimeout(() => {
+      if (!pendingDeleteBase) return;
+      clearPendingDelete();
+      const status = picoListStatus();
+      setFilesStatus(status[0], status[1]);
+    }, 3500);
+    return;
+  }
+  dismissBaseRow();
+  clearPendingDelete();
+  setFilesStatus("Réglage supprimé", "");
 }
 
 async function postSettings(url, body) {
@@ -1332,6 +1389,7 @@ async function deletePicoPreset(id) {
   const wanted = String(id);
   if (pendingDeleteId !== wanted) {
     clearTimeout(pendingDeleteTimer);
+    pendingDeleteBase = false;
     pendingDeleteId = wanted;
     renderPresetList();
     setFilesStatus("Touchez « Suppr. » pour confirmer.", "is-warn");
@@ -1606,6 +1664,10 @@ function wireConfigFiles() {
   $("cfgPresetList")?.addEventListener("click", (e) => {
     const button = e.target.closest("button");
     if (!button) return;
+    if (button.dataset.presetBaseDelete) {
+      deleteBasePreset();
+      return;
+    }
     if (button.dataset.presetBase) {
       loadBaseConfig();
       return;
@@ -1755,7 +1817,7 @@ function updatePanels() {
   if (quantPanel) quantPanel.hidden = !inRole || !showQuant;
   const showParams = panelView === "params" && !filesOpen && !aboutOpen;
   $("settingsToggle")?.classList.toggle("active", settingsOpen && showParams);
-  // Fichier et à propos ne sortent qu'avec les paramètres, pas avec une piste.
+  // Sur mobile, fichier et à propos ne sortent qu'avec les paramètres, pas avec une piste.
   document.body.classList.toggle("panel-role", inRole);
   if (infoPanel) infoPanel.hidden = !showParams;
   if (filesPanel) filesPanel.hidden = !filesOpen;
@@ -1905,13 +1967,14 @@ function bindSliders() {
 
 bindSliders();
 
-function instSelectHtml(selected, enabled = true) {
+function instSelectHtml(selected) {
   const options = Object.keys(INST).map((id) => {
     const used = roleUsesInst(id);
-    const mark = used && used !== uiRole ? ` · ${ROLE_META[used].title}` : "";
-    return `<option value="${id}"${id === selected ? " selected" : ""}>${INST[id].label}${mark}</option>`;
+    const taken = used && used !== uiRole;
+    const mark = taken ? ` · ${ROLE_META[used].title}` : "";
+    return `<option value="${id}"${id === selected ? " selected" : ""}${taken ? " disabled" : ""}>${INST[id].label}${mark}</option>`;
   }).join("");
-  return `<select class="inst-select" id="roleInst" aria-label="Instrument"${enabled ? "" : " disabled"}>${options}</select>`;
+  return `<select class="inst-select" id="roleInst" aria-label="Instrument">${options}</select>`;
 }
 
 function paramRowHtml({ id, label, min, max, step, value, formatted, linked, extraAttrs, showLink, resetKind, resetId, labelTitle }) {
@@ -2219,8 +2282,18 @@ function openRole(role) {
   aboutOpen = false;
   if (role === "quant") renderQuantPanel();
   else renderRolePanel();
+  openDesktopInstrumentSheet();
   if (!settingsOpen) setSettingsOpen(true);
   else updatePanels();
+}
+
+// Sur desktop, les paramètres de l'instrument sont déjà dépliés.
+function openDesktopInstrumentSheet() {
+  if (isMobileSheet() || panelView !== "role" || filesOpen || aboutOpen) return;
+  const kind = uiRole === "quant" ? "quant" : "role";
+  if (sheetKind === kind) return;
+  sheetKind = kind;
+  renderSheet(true);
 }
 
 function syncPipTitle() {
@@ -2255,9 +2328,15 @@ function placeTrackIcons() {
   const mobile = !!(window.matchMedia && window.matchMedia("(max-width: 640px)").matches);
   const slot = $("headIconSlot");
   const anchor = $("pipAnchor");
-  if (mobile && settingsOpen && panelView === "role" && slot) slot.appendChild(pips);
-  else if (mobile) document.body.appendChild(pips);
-  else if (anchor) anchor.after(pips);
+  if (mobile && settingsOpen && panelView === "role" && slot) {
+    if (pips.parentElement !== slot) slot.appendChild(pips);
+    return;
+  }
+  if (mobile) {
+    if (pips.parentElement !== document.body) document.body.appendChild(pips);
+    return;
+  }
+  if (anchor && anchor.nextElementSibling !== pips) anchor.after(pips);
 }
 
 function syncRoleButtons() {
@@ -4878,16 +4957,11 @@ function quantSheetHtml() {
   const rootSelect = `<select class="inst-select qz-root" id="qzRoot" aria-label="Tonique">` +
     Quantizer.NOTE_NAMES.map((n, i) => `<option value="${i}"${i === q.root ? " selected" : ""}>${n}</option>`).join("") +
     `</select>`;
-  if (isMobileSheet()) {
-    html += `<div class="qz-block qz-scale-row"><div class="qz-label"><span>Gamme</span></div>`;
-    html += rootSelect;
-    html += `<select class="inst-select qz-scale" id="qzScale" aria-label="Type de gamme">` +
-      Object.keys(Quantizer.SCALES).map((v) => `<option value="${v}"${v === q.scale ? " selected" : ""}>${Quantizer.SCALES[v].label}</option>`).join("") +
-      `</select></div>`;
-  } else {
-    html += `<div class="qz-block"><div class="qz-label"><span>Gamme</span>${rootSelect}</div>`;
-    html += qzSegHtml("qzScale", Object.keys(Quantizer.SCALES).map((v) => ({ v, l: Quantizer.SCALES[v].label })), q.scale) + `</div>`;
-  }
+  html += `<div class="qz-block qz-scale-row"><div class="qz-label"><span>Gamme</span></div>`;
+  html += rootSelect;
+  html += `<select class="inst-select qz-scale" id="qzScale" aria-label="Type de gamme">` +
+    Object.keys(Quantizer.SCALES).map((v) => `<option value="${v}"${v === q.scale ? " selected" : ""}>${Quantizer.SCALES[v].label}</option>`).join("") +
+    `</select></div>`;
   html += `<div class="qz-block"><div class="qz-label"><span>Pas</span></div>`;
   html += qzSegHtml("qzEvery", QZ_EVERY.map((v) => ({ v, l: String(v), title: v === 1 ? "Une note par temps" : `Une note tous les ${v} temps` })), q.every) + `</div>`;
   html += `<div class="qz-block"><div class="qz-label"><span>Plafond</span></div>`;
@@ -5210,9 +5284,14 @@ function roleSheetHtml(role) {
   const r = routing[role];
   const t01 = smoothedT01[role] ?? roleLinkT01(role);
   let html = sheetPreviewHtml(role);
-  html += `<button type="button" class="pick-open role-panel" data-role="${role}" id="pickOpen">` +
-    `<span class="pick-open-label">Instrument</span><span class="pick-open-name">${INST[r.inst].label}</span>` +
-    `<svg class="inst-open-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>`;
+  if (isMobileSheet()) {
+    html += `<button type="button" class="pick-open role-panel" data-role="${role}" id="pickOpen">` +
+      `<span class="pick-open-label">Instrument</span><span class="pick-open-name">${INST[r.inst].label}</span>` +
+      `<svg class="inst-open-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>`;
+  } else {
+    html += `<div class="pick-open inst-pick">` +
+      `<span class="pick-open-label">Instrument</span>${instSelectHtml(r.inst)}</div>`;
+  }
   html += `<div class="sheet-sec sheet-card role-panel" data-role="${role}">`;
   html += instParams(r.inst).map((p) => {
     const live = roleParamValue(role, p.id, t01);
@@ -5266,9 +5345,17 @@ function openPicker(role) {
     const row = e.target.closest(".pick-row");
     if (!row || row.classList.contains("is-taken")) return;
     const list = e.currentTarget;
+    const scroller = !isMobileSheet() ? document.querySelector(".settings-body") : null;
+    const scroll = scroller ? scroller.scrollTop : 0;
     if (row.dataset.inst !== routing[role].inst) setRoleInstrument(role, row.dataset.inst);
     markPicked(list, "inst", routing[role].inst);
     if (!isMobileSheet()) inline();
+    // Le panneau est reconstruit : sans ça, l'ascenseur remonte et la liste suivante sort du cadre.
+    if (scroller) {
+      const pin = () => { scroller.scrollTop = scroll; };
+      pin();
+      requestAnimationFrame(pin);
+    }
   };
   if (!isMobileSheet()) {
     const open = document.querySelector(".inst-inline .pick-list");
@@ -5343,6 +5430,18 @@ function openTimbrePicker() {
 function bindRoleSheet(body, role) {
   const r = routing[role];
   body.querySelector("#pickOpen")?.addEventListener("click", () => openPicker(role));
+  body.querySelector("#roleInst")?.addEventListener("change", (e) => {
+    const id = e.target.value;
+    if (!id || id === routing[role].inst) return;
+    const scroller = document.querySelector(".settings-body");
+    const scroll = scroller ? scroller.scrollTop : 0;
+    setRoleInstrument(role, id);
+    if (scroller) {
+      const pin = () => { scroller.scrollTop = scroll; };
+      pin();
+      requestAnimationFrame(pin);
+    }
+  });
   body.querySelectorAll("input[data-link-param]").forEach((box) => {
     box.addEventListener("change", () => setRoleParam(role, box.checked ? box.dataset.linkParam : null));
   });

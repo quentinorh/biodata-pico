@@ -140,16 +140,19 @@
   // Réponses impulsionnelles synthétiques, en envoi sur le bus master.
   // rt60 : décroissance de 60 dB (s) ; damp : fréquence de coupure de la queue en fin de décroissance.
   const REVERBS = {
-    romane: { label: "Claire", rt60: 3.6, pre: 0.022, early: 0.5, bright: 6500, damp: 1400, lowcut: 110 },
-    abbatiale: { label: "Ample", rt60: 5.2, pre: 0.034, early: 0.42, bright: 7000, damp: 1100, lowcut: 95 },
-    cathedrale: { label: "Longue", rt60: 7.4, pre: 0.048, early: 0.36, bright: 7500, damp: 900, lowcut: 85 },
-    basilique: { label: "Vaste", rt60: 10.5, pre: 0.065, early: 0.3, bright: 6800, damp: 750, lowcut: 75 },
-    crypte: { label: "Sourde", rt60: 4.6, pre: 0.012, early: 0.7, bright: 3200, damp: 520, lowcut: 140 },
+    claire: { label: "Claire", rt60: 3.6, pre: 0.022, early: 0.5, bright: 6500, damp: 1400, lowcut: 110 },
+    ample: { label: "Ample", rt60: 5.2, pre: 0.034, early: 0.42, bright: 7000, damp: 1100, lowcut: 95 },
+    longue: { label: "Longue", rt60: 7.4, pre: 0.048, early: 0.36, bright: 7500, damp: 900, lowcut: 85 },
+    vaste: { label: "Vaste", rt60: 10.5, pre: 0.065, early: 0.3, bright: 6800, damp: 750, lowcut: 75 },
+    sourde: { label: "Sourde", rt60: 4.6, pre: 0.012, early: 0.7, bright: 3200, damp: 520, lowcut: 140 },
   };
+  function reverbId(id) {
+    return REVERBS[id] ? id : "";
+  }
   const reverbState = { id: "", mix: 0.35 };
   const irCache = Object.create(null);
 
-  function buildChurchIR(ctx, spec, seed) {
+  function buildReverbIR(ctx, spec, seed) {
     const sr = ctx.sampleRate;
     // Sur mobile la queue s'arrête à -40 dB : un tiers de convolution en moins, l'oreille ne l'entend pas sous les drones.
     const tail = isMobile ? 0.7 : 1.05;
@@ -162,7 +165,7 @@
       rnd ^= rnd << 13; rnd ^= rnd >>> 17; rnd ^= rnd << 5;
       return ((rnd >>> 0) / 4294967296) * 2 - 1;
     };
-    // Réflexions précoces : murs, piliers et voûte, différentes à gauche et à droite.
+    // Réflexions précoces, différentes à gauche et à droite.
     const reflections = 18;
     for (let ch = 0; ch < 2; ch++) {
       const data = buffer.getChannelData(ch);
@@ -193,9 +196,9 @@
     return buffer;
   }
 
-  function churchIR(ctx, id) {
+  function reverbIR(ctx, id) {
     const key = id + "@" + ctx.sampleRate;
-    if (!irCache[key]) irCache[key] = buildChurchIR(ctx, REVERBS[id], cyrb53(id));
+    if (!irCache[key]) irCache[key] = buildReverbIR(ctx, REVERBS[id], cyrb53(id));
     return irCache[key];
   }
 
@@ -233,7 +236,7 @@
     setTimeout(() => {
       if (ctx._gardenVerb !== verb || ctx.state === "closed") return;
       try {
-        conv.buffer = churchIR(ctx, verb.id);
+        conv.buffer = reverbIR(ctx, verb.id);
         ctx._gardenMaster.connect(send);
         send.connect(conv);
         conv.connect(wet);
@@ -246,7 +249,7 @@
   }
 
   function setReverb(id, mix) {
-    reverbState.id = REVERBS[id] ? id : "";
+    reverbState.id = reverbId(id);
     if (Number.isFinite(mix)) reverbState.mix = Math.max(0, Math.min(1, mix));
     if (sharedCtx) applyReverb(sharedCtx);
   }
@@ -992,6 +995,7 @@
     healthCheck,
     peakLevel,
     REVERBS,
+    reverbId,
     setReverb,
     unlock,
     pulse,

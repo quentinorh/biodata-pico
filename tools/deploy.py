@@ -9,6 +9,7 @@ le PC : les WASM sont résolus via les hashes injectés dans ``catalog.js``.
 
     python tools/deploy.py
     python tools/deploy.py --port COM16
+    python tools/deploy.py --quick
 """
 
 import argparse
@@ -358,7 +359,7 @@ def main():
     parser.add_argument(
         "--quick",
         action="store_true",
-        help="Ne recopier que le firmware et les fichiers principaux de app",
+        help="Interface et firmware seulement, sans les fichiers Faust",
     )
     args = parser.parse_args()
     try:

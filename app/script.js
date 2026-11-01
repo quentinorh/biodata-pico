@@ -1,8 +1,8 @@
 // ─── State ───
 let totalPulses = 0;
 let history = [];
-let noteMarkers = []; // parallèle à history : true aux positions où une note a été jouée
-let noteRipples = []; // { idx, born } — cercles qui s'expandent autour des notes jouées
+let noteMarkers = []; // parallèle à history : false, "track", "quant" ou "both"
+let noteRipples = []; // { idx, born, kind } — cercles qui s'expandent autour des notes jouées
 let lastPeakIdx = -1;
 const MAX_HISTORY = 800;
 const RIPPLE_MS = 800;
@@ -628,8 +628,14 @@ for (let i = 0; i < FAUST_PATCHES.length; i++) {
 
 const ROLE_META = {
   ambiance: { title: "Ambiance", blurb: "Toute la hauteur du graphique, plus l’agitation globale." },
-  vegetal: { title: "Végétal", blurb: "Le centre, entre les seuils : les petits mouvements y sont très sensibles." },
-  interaction: { title: "Toucher", blurb: "Ce qui dépasse les seuils, surtout les attaques." },
+  vegetal: { title: "Plante", blurb: "Le centre, entre les seuils : les petits mouvements y sont très sensibles." },
+  interaction: { title: "Interaction", blurb: "Ce qui dépasse les seuils, surtout les attaques." },
+};
+
+const TRACK_LABELS = {
+  quant: "Rythme",
+  vegetal: "Plante",
+  interaction: "Interaction",
 };
 
 const ROUTING_KEY = "plante-mix-v2";
@@ -1426,6 +1432,10 @@ function isResetDefault(kind, id) {
     const spec = P_SPEC[id];
     return !!(spec && valuesNear(P[id], spec.def, spec.max - spec.min));
   }
+  if (kind === "quant" && id === "level") {
+    const def = window.Quantizer ? Quantizer.sanitize({}).level : 70;
+    return valuesNear(G.quant.level, def, 100);
+  }
   if (kind === "mod") {
     if (id === "modSmooth") return Math.abs(roleModSmooth(role) - roleModDef(role, "modSmooth")) < 0.05;
     if (id === "modAmount") return roleModAmount(role) === roleModDef(role, "modAmount");
@@ -1452,6 +1462,11 @@ function syncResetButton(btn) {
 
 function resetParam(kind, id) {
   const role = uiRole;
+  if (kind === "quant" && id === "level" && window.Quantizer) {
+    qzApply({ level: Quantizer.sanitize({}).level });
+    renderQuantPanel();
+    return;
+  }
   if (kind === "mix") {
     if (!P_SPEC[id]) return;
     P[id] = P_SPEC[id].def;
@@ -1682,12 +1697,11 @@ function roleUsesInst(instId) {
 
 // Wire all sliders
 let settingsOpen = false;
-let infoOpen = false;
 let filesOpen = false;
 let aboutOpen = false;
 
 function subPanelOpen() {
-  return infoOpen || filesOpen || aboutOpen;
+  return filesOpen || aboutOpen;
 }
 
 function setPanelChrome(panelId, toggleId, open) {
@@ -1704,36 +1718,48 @@ function sessionOpen() {
   return settingsOpen;
 }
 
+// À chaque ouverture ou changement de panneau, l'ascenseur repart en haut.
+let panelScrollKey = "";
+
+function panelScrollId() {
+  if (!settingsOpen) return "";
+  if (filesOpen) return "files";
+  if (aboutOpen) return "about";
+  if (panelView === "role") return "role:" + uiRole;
+  return "params";
+}
+
+function resetPanelScroll() {
+  const next = panelScrollId();
+  if (next === panelScrollKey) return false;
+  panelScrollKey = next;
+  return true;
+}
+
 function updatePanels() {
+  const scrollToTop = resetPanelScroll();
   // Sur mobile, la courbe se resserre au-dessus du panneau : la vue suit la nouvelle hauteur.
   requestGraphRedraw();
   setPanelChrome("settingsPanel", "settingsToggle", settingsOpen);
   $("settingsBackdrop").classList.toggle("open", settingsOpen);
   document.body.classList.toggle("settings-open", settingsOpen);
-  document.body.classList.toggle("info-open", !!(settingsOpen && infoOpen));
+  document.body.classList.toggle("view-params", settingsOpen && panelView === "params" && !filesOpen && !aboutOpen);
   const rolePanel = $("rolePanel");
   const infoPanel = $("infoPanel");
   const filesPanel = $("filesPanel");
   const aboutPanel = $("aboutPanel");
-  const inRole = panelView === "role" && !subPanelOpen();
+  const inRole = panelView === "role" && !filesOpen && !aboutOpen;
   const showQuant = uiRole === "quant";
   if (rolePanel) rolePanel.hidden = !inRole || showQuant;
   const quantPanel = $("quantPanel");
   if (quantPanel) quantPanel.hidden = !inRole || !showQuant;
-  const mixPanel = $("mixPanel");
-  if (mixPanel) mixPanel.hidden = panelView !== "mix" || subPanelOpen();
-  $("settingsToggle")?.classList.toggle("active", settingsOpen && panelView === "mix" && !subPanelOpen());
-  // Les icônes rouage, fichier et info ne sortent qu'avec les Réglages, pas avec un instrument.
-  document.body.classList.toggle("panel-role", panelView === "role" && !subPanelOpen());
-  if (infoPanel) infoPanel.hidden = !infoOpen;
+  const showParams = panelView === "params" && !filesOpen && !aboutOpen;
+  $("settingsToggle")?.classList.toggle("active", settingsOpen && showParams);
+  // Fichier et à propos ne sortent qu'avec les paramètres, pas avec une piste.
+  document.body.classList.toggle("panel-role", inRole);
+  if (infoPanel) infoPanel.hidden = !showParams;
   if (filesPanel) filesPanel.hidden = !filesOpen;
   if (aboutPanel) aboutPanel.hidden = !aboutOpen;
-  const infoBtn = $("infoToggle");
-  if (infoBtn) {
-    infoBtn.inert = !settingsOpen;
-    infoBtn.setAttribute("aria-hidden", settingsOpen ? "false" : "true");
-    infoBtn.classList.toggle("active", settingsOpen && infoOpen);
-  }
   const filesBtn = $("filesToggle");
   if (filesBtn) {
     filesBtn.inert = !settingsOpen;
@@ -1748,6 +1774,10 @@ function updatePanels() {
   }
 
   syncRoleButtons();
+  syncTrackNav();
+  syncPipTitle();
+  syncTabTitle();
+  placeTrackIcons();
   if (settingsOpen && !subPanelOpen() && panelView === "role") {
     tzWake();
     if (G.quantOn) qzWake();
@@ -1755,85 +1785,84 @@ function updatePanels() {
     unlockAudio();
     syncSensorLinkUi();
   }
-  if (settingsOpen && infoOpen) refreshStatusInfo();
+  if (settingsOpen && panelView === "params" && !filesOpen && !aboutOpen) refreshStatusInfo();
   if (settingsOpen && filesOpen) syncTitleInput();
+  if (scrollToTop) {
+    const body = document.querySelector(".settings-body");
+    if (body) body.scrollTop = 0;
+  }
+  rememberRoleSheetHeight();
 }
 
-// Le bouton Réglages ouvre le mix (VOL, BPM) ; une pastille ouvre l'instrument.
-var panelView = "mix";
+// Le bouton Réglages ouvre les paramètres (volume, BPM) ; une pastille ouvre l'instrument.
+var panelView = "params";
 
 function setSettingsOpen(open) {
   settingsOpen = !!open;
+  if (settingsOpen) setZoomPop(false);
   if (!settingsOpen) closeSheet();
-  infoOpen = false;
   filesOpen = false;
   aboutOpen = false;
   updatePanels();
 }
 
 function toggleSettings() {
-  if (settingsOpen && (panelView !== "mix" || subPanelOpen())) {
+  if (settingsOpen && (panelView !== "params" || filesOpen || aboutOpen)) {
     closeSheet();
-    panelView = "mix";
-    setSettingsOpen(true);
+    openParams();
     return;
   }
-  panelView = "mix";
+  panelView = "params";
   setSettingsOpen(!settingsOpen);
+}
+
+function openParams() {
+  closeSheet();
+  panelView = "params";
+  filesOpen = false;
+  aboutOpen = false;
+  if (!settingsOpen) setSettingsOpen(true);
+  else updatePanels();
 }
 
 function closeSettings() {
   closeSheet();
   settingsOpen = false;
-  infoOpen = false;
   filesOpen = false;
   aboutOpen = false;
   updatePanels();
 }
 
-function setInfoOpen(open) {
-  if (!settingsOpen && open) settingsOpen = true;
-  infoOpen = !!open;
-  if (infoOpen) {
-    filesOpen = false;
-    aboutOpen = false;
-  }
-  updatePanels();
-}
-
-function toggleInfo() {
-  if (!settingsOpen) return;
-  setInfoOpen(!infoOpen);
-}
-
 function setFilesOpen(open) {
   if (!settingsOpen && open) settingsOpen = true;
   filesOpen = !!open;
-  if (filesOpen) {
-    infoOpen = false;
-    aboutOpen = false;
-  }
+  if (filesOpen) aboutOpen = false;
   updatePanels();
 }
 
 function toggleFiles() {
   if (!settingsOpen) return;
-  setFilesOpen(!filesOpen);
+  if (filesOpen) {
+    closeSettings();
+    return;
+  }
+  setFilesOpen(true);
 }
 
 function setAboutOpen(open) {
   if (!settingsOpen && open) settingsOpen = true;
   aboutOpen = !!open;
-  if (aboutOpen) {
-    infoOpen = false;
-    filesOpen = false;
-  }
+  if (aboutOpen) filesOpen = false;
   updatePanels();
 }
 
 function toggleAbout() {
   if (!settingsOpen) return;
-  setAboutOpen(!aboutOpen);
+  if (aboutOpen) {
+    closeSettings();
+    return;
+  }
+  setAboutOpen(true);
 }
 
 function syncParamSlider(key) {
@@ -1982,6 +2011,11 @@ function tzFrame(now) {
     const st = tz.root.style;
     st.setProperty("--v", trackVar.toFixed(4));
     st.setProperty("--live", paramToUnit(tu.spec, live).toFixed(4));
+    const cursor = $("sheetCursor");
+    if (cursor && cursor.closest("[data-role]")?.dataset.role === role) {
+      cursor.style.setProperty("--v", trackVar.toFixed(4));
+      cursor.style.setProperty("--live", paramToUnit(tu.spec, live).toFixed(4));
+    }
     if (now - (tz.textAt || 0) > 90) {
       tz.textAt = now;
       if (tz.valEl) tz.valEl.textContent = formatInstParam(tu.spec, live);
@@ -2152,6 +2186,78 @@ function syncSensorLinkUi() {
     ratioEl.textContent = formatRoleRatio(role);
     ratioEl.classList.toggle("is-rest", resting);
   }
+  const sheetLive = $("sheetSensorLive");
+  if (sheetLive) sheetLive.textContent = formatUs(last);
+  const sheetRatio = $("sheetSensorRatio");
+  if (sheetRatio) {
+    sheetRatio.textContent = formatRoleRatio(role);
+    sheetRatio.classList.toggle("is-rest", resting);
+  }
+}
+
+function syncTrackNav() {
+  const nav = $("trackNav");
+  if (!nav) return;
+  const show = settingsOpen && !filesOpen && !aboutOpen;
+  nav.hidden = !show;
+  nav.querySelectorAll(".track-nav-btn").forEach((btn) => {
+    const on = btn.dataset.view === "params"
+      ? panelView === "params"
+      : panelView === "role" && btn.dataset.role === uiRole;
+    btn.classList.toggle("is-on", on);
+    if (on) btn.setAttribute("aria-current", "true");
+    else btn.removeAttribute("aria-current");
+  });
+}
+
+function openRole(role) {
+  if (!TRACK_LABELS[role]) return;
+  if (uiRole !== role) closeSheet();
+  uiRole = role;
+  panelView = "role";
+  filesOpen = false;
+  aboutOpen = false;
+  if (role === "quant") renderQuantPanel();
+  else renderRolePanel();
+  if (!settingsOpen) setSettingsOpen(true);
+  else updatePanels();
+}
+
+function syncPipTitle() {
+  const el = $("pipTitle");
+  const on = settingsOpen && panelView === "role" && !filesOpen && !aboutOpen && !!TRACK_LABELS[uiRole];
+  if (el) {
+    el.hidden = !on;
+    if (on) {
+      el.textContent = TRACK_LABELS[uiRole];
+      el.dataset.role = uiRole;
+    }
+  }
+  document.querySelectorAll(".head-name").forEach((btn) => {
+    const active = on && btn.dataset.role === uiRole;
+    btn.classList.toggle("is-on", active);
+    if (active) btn.setAttribute("aria-current", "true");
+    else btn.removeAttribute("aria-current");
+  });
+}
+
+function syncTabTitle() {
+  const el = $("tabTitle");
+  if (!el) return;
+  const label = filesOpen ? "Présets" : aboutOpen ? "Infos" : panelView === "params" ? "Réglages" : "";
+  el.hidden = !label;
+  if (label) el.textContent = label;
+}
+
+function placeTrackIcons() {
+  const pips = $("rolePips");
+  if (!pips) return;
+  const mobile = !!(window.matchMedia && window.matchMedia("(max-width: 640px)").matches);
+  const slot = $("headIconSlot");
+  const anchor = $("pipAnchor");
+  if (mobile && settingsOpen && panelView === "role" && slot) slot.appendChild(pips);
+  else if (mobile) document.body.appendChild(pips);
+  else if (anchor) anchor.after(pips);
 }
 
 function syncRoleButtons() {
@@ -2244,25 +2350,10 @@ wireConfigFiles();
 
 // Les pastilles (quantizer, arbre, main) sont la navigation : panneau fermé, elles l'ouvrent
 // directement sur leur onglet.
-document.querySelectorAll(".role-tab").forEach((btn) => {
+document.querySelectorAll(".role-tab, .track-nav-btn, .head-name").forEach((btn) => {
   btn.addEventListener("click", () => {
-    if (uiRole !== btn.dataset.role) closeSheet();
-    uiRole = btn.dataset.role;
-    panelView = "role";
-    infoOpen = false;
-    filesOpen = false;
-    aboutOpen = false;
-    if (!settingsOpen) setSettingsOpen(true);
-    else renderRolePanel();
-    if (uiRole === "quant") renderQuantPanel();
-    updatePanels();
-    if (subPanelOpen()) {
-      infoOpen = false;
-      filesOpen = false;
-      aboutOpen = false;
-      updatePanels();
-    }
-    renderRolePanel();
+    if (btn.dataset.view === "params") openParams();
+    else openRole(btn.dataset.role);
   });
 });
 
@@ -2315,9 +2406,7 @@ function fullscreenElement() {
 function syncFullscreenButton() {
   const btn = $("fullscreenToggle");
   if (!btn) return;
-  const on = !!fullscreenElement();
-  btn.textContent = on ? "Quitter le plein écran" : "Plein écran";
-  btn.setAttribute("aria-pressed", on ? "true" : "false");
+  btn.checked = !!fullscreenElement();
 }
 
 async function toggleFullscreen() {
@@ -2337,6 +2426,7 @@ async function toggleFullscreen() {
 
 document.addEventListener("fullscreenchange", syncFullscreenButton);
 document.addEventListener("webkitfullscreenchange", syncFullscreenButton);
+$("fullscreenToggle")?.addEventListener("change", () => { toggleFullscreen(); });
 
 function syncGeneralControls() {
   const dynBox = $("dynThreshEnabled");
@@ -2491,7 +2581,7 @@ $("debugToggle")?.addEventListener("change", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && (settingsOpen || infoOpen || filesOpen || aboutOpen)) closeSettings();
+  if (e.key === "Escape" && (settingsOpen || filesOpen || aboutOpen)) closeSettings();
 });
 
 function applyParam(key, raw) {
@@ -2850,6 +2940,31 @@ function unlockAudio(e) {
     if (!Quantizer.running) Quantizer.start();
     else Quantizer.rebind();
   }
+  if (e) updateSoundChip();
+}
+
+// Le contexte partagé peut être recréé (changement de fréquence d'échantillonnage) :
+// chaque nouveau contexte reçoit son propre écouteur.
+function updateSoundChip() {
+  const chip = document.getElementById("soundChip");
+  if (!chip || !window.FaustGarden) return;
+  const ctx = FaustGarden.bus().ctx;
+  if (!ctx._soundChipWatch) {
+    ctx._soundChipWatch = true;
+    ctx.addEventListener("statechange", updateSoundChip);
+  }
+  if (ctx.state !== "running" && ctx.state !== "closed") {
+    chip.classList.remove("is-leaving");
+    chip.hidden = false;
+    return;
+  }
+  if (chip.hidden || chip.classList.contains("is-leaving")) return;
+  chip.classList.add("is-leaving");
+  setTimeout(() => {
+    if (!chip.classList.contains("is-leaving")) return;
+    chip.hidden = true;
+    chip.classList.remove("is-leaving");
+  }, 250);
 }
 
 function roleDriveMode(role) {
@@ -2927,7 +3042,6 @@ function roleZoneGate(role) {
 }
 
 function roleFaustGain(role) {
-  if (G.quantOn && !G.quant.withTracks) return 0.0001;
   if (!audioEnabled || !routing[role].on || !INST[routing[role].inst]) return 0.0001;
   const master = P.masterVol / 100;
   const vol = liveRoleVolume(role) / 100;
@@ -3205,9 +3319,6 @@ function roleSignalInZone(role) {
 
 function formatRoleRatio(role) {
   const pct = Math.round(roleControlT01(role) * 100);
-  if (role === "vegetal" && thresholdsEnabled && !roleSignalInZone(role)) {
-    return "repos " + pct + " %";
-  }
   return pct + " %";
 }
 
@@ -3431,13 +3542,9 @@ function setRoleEnabled(role, on) {
 
 function setRoleInstrument(role, inst) {
   if (!INST[inst]) return;
-  stashRoleInstrument(role);
   const other = roleUsesInst(inst);
-  if (other && other !== role) {
-    stashRoleInstrument(other);
-    applyInstrumentMemory(other, unusedInstrument(other));
-    if (audioEnabled) syncRoleAudio(other);
-  }
+  if (other && other !== role) return;
+  stashRoleInstrument(role);
   applyInstrumentMemory(role, inst);
   const ids = instParams(inst).map((p) => p.id);
   if (ids.indexOf(routing[role].param) === -1) routing[role].param = INST[inst].defaultParam;
@@ -3642,17 +3749,20 @@ function getBatchTrigger(intervals) {
   return { value, batchIdx };
 }
 
-function spawnNoteRipple(idx) {
+function spawnNoteRipple(idx, kind) {
   if (!graphAnimations) return;
-  noteRipples.push({ idx, born: performance.now() });
+  noteRipples.push({ idx, born: performance.now(), kind: kind === "quant" ? "quant" : "track" });
   needGraphDraw = true;
   bumpVisualFrame();
 }
 
-function markNoteIndex(idx) {
+function markNoteIndex(idx, kind) {
   if (idx < 0 || idx >= noteMarkers.length) return;
-  noteMarkers[idx] = true;
-  spawnNoteRipple(idx);
+  const next = kind === "quant" ? "quant" : "track";
+  const prev = noteMarkers[idx];
+  if (prev && prev !== next) noteMarkers[idx] = "both";
+  else noteMarkers[idx] = next;
+  spawnNoteRipple(idx, next);
 }
 
 function playMappedNote(role, spec) {
@@ -3871,7 +3981,6 @@ function toggleRecord() {
   recording = true;
   $("recToggle").classList.add("recording");
   $("settingsToggle").classList.add("recording");
-  $("infoToggle")?.classList.add("recording");
   const timer = $("recTimer");
   timer.hidden = false;
   timer.style.display = "";
@@ -3896,7 +4005,6 @@ function stopRecord() {
   clearInterval(recTimer);
   $("recToggle").classList.remove("recording");
   $("settingsToggle").classList.remove("recording");
-  $("infoToggle")?.classList.remove("recording");
   $("recTimer").hidden = true;
 
   if (recData.length === 0) return;
@@ -3930,11 +4038,7 @@ function nudgePointSpacing(direction) {
 }
 
 function updateSpanButtons() {
-  const plus = $("spanPlus");
-  const minus = $("spanMinus");
-  if (!plus || !minus) return;
-  plus.disabled = visibleCount <= MIN_VISIBLE_POINTS;
-  minus.disabled = visibleCount >= MAX_VISIBLE_POINTS;
+  syncZoomSliders();
 }
 
 const GRAPH_PAD = 4;
@@ -3964,6 +4068,80 @@ function zoomGraphAtY(clientY, factor) {
 
 function zoomGraphAtWheel(clientY, deltaY) {
   zoomGraphAtY(clientY, deltaY > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR);
+  syncZoomSliders();
+}
+
+function zoomPctFromSpan(span, min, max) {
+  const lo = Math.log(min);
+  const hi = Math.log(max);
+  const t = (hi - Math.log(clamp(span, min, max))) / (hi - lo);
+  return Math.round(clamp(t, 0, 1) * 100);
+}
+
+function spanFromZoomPct(pct, min, max) {
+  const t = clamp(Number(pct), 0, 100) / 100;
+  const lo = Math.log(min);
+  const hi = Math.log(max);
+  return Math.exp(hi - t * (hi - lo));
+}
+
+function syncZoomSliders() {
+  const pop = $("zoomPop");
+  if (!pop || pop.hidden) return;
+  const h = $("zoomH");
+  const v = $("zoomV");
+  if (h && document.activeElement !== h) {
+    h.value = String(zoomPctFromSpan(visibleCount, MIN_VISIBLE_POINTS, MAX_VISIBLE_POINTS));
+  }
+  if (v && document.activeElement !== v && isViewReady()) {
+    v.value = String(zoomPctFromSpan(viewRange(), MIN_ZOOM_RANGE, MAX_ZOOM_RANGE));
+  }
+}
+
+function setZoomPop(open) {
+  const pop = $("zoomPop");
+  const btn = $("zoomToggle");
+  if (!pop || !btn) return;
+  pop.hidden = !open;
+  btn.classList.toggle("active", !!open);
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+  if (open) syncZoomSliders();
+}
+
+function applyHorizontalZoom(pct) {
+  visibleCount = clamp(
+    Math.round(spanFromZoomPct(pct, MIN_VISIBLE_POINTS, MAX_VISIBLE_POINTS)),
+    MIN_VISIBLE_POINTS,
+    MAX_VISIBLE_POINTS
+  );
+  persistConfig();
+  requestGraphRedraw();
+}
+
+function applyVerticalZoom(pct) {
+  if (!isViewReady()) return;
+  if (G.autoZoom) setAutoZoom(false);
+  const mid = (globalMin + globalMax) / 2;
+  const range = spanFromZoomPct(pct, MIN_ZOOM_RANGE, MAX_ZOOM_RANGE);
+  globalMin = Math.round(mid - range / 2);
+  globalMax = Math.round(mid + range / 2);
+  zoomHalf = range / 2;
+  needStatsFlush = true;
+  requestGraphRedraw();
+}
+
+function bindZoomPop() {
+  $("zoomToggle")?.addEventListener("click", () => {
+    const pop = $("zoomPop");
+    setZoomPop(!pop || pop.hidden);
+  });
+  const sliders = [$("zoomH"), $("zoomV")].filter(Boolean);
+  sliders.forEach((input) => {
+    input.addEventListener("input", (e) => {
+      if (input.id === "zoomH") applyHorizontalZoom(e.target.value);
+      else applyVerticalZoom(e.target.value);
+    });
+  });
 }
 
 function panGraphByDy(dy) {
@@ -4073,19 +4251,20 @@ function drawGraph() {
   }
 
   for (let j = start; j < history.length; j++) {
-    if (!noteMarkers[j] || !valInView(history[j])) continue;
+    const kind = noteMarkers[j] === true ? "track" : noteMarkers[j];
+    if (!kind || !valInView(history[j])) continue;
     const nx = xAt(j);
     const ny = valToY(history[j], h, pad, range);
-    const inZone = inThreshZone(history[j]);
+    const paint = notePaint(kind, inThreshZone(history[j]));
 
     ctx.beginPath();
     ctx.arc(nx, ny, 4.5, 0, Math.PI * 2);
-    ctx.fillStyle = inZone ? "rgba(139, 196, 138, .16)" : "rgba(255, 160, 60, .16)";
+    ctx.fillStyle = paint.halo;
     ctx.fill();
 
     ctx.beginPath();
     ctx.arc(nx, ny, 2, 0, Math.PI * 2);
-    ctx.fillStyle = inZone ? "#d6f0d2" : "#ffd6a6";
+    ctx.fillStyle = paint.dot;
     ctx.fill();
   }
 
@@ -4158,6 +4337,14 @@ function drawThresholdLine(ctx, w, y, color, dash) {
   ctx.restore();
 }
 
+function notePaint(kind, inZone) {
+  if (kind === "quant" || kind === "both") {
+    return { rgb: "212, 255, 74", dot: "#f4ffb0", halo: "rgba(212, 255, 74, .22)" };
+  }
+  if (inZone) return { rgb: "139, 196, 138", dot: "#d6f0d2", halo: "rgba(139, 196, 138, .16)" };
+  return { rgb: "255, 160, 60", dot: "#ffd6a6", halo: "rgba(255, 160, 60, .16)" };
+}
+
 function drawNoteRipples(ctx, start, xAt, h, pad, range) {
   if (!graphAnimations || noteRipples.length === 0) return;
   const now = performance.now();
@@ -4174,7 +4361,7 @@ function drawNoteRipples(ctx, start, xAt, h, pad, range) {
     const radius = 5 + ease * 28;
     const alpha = (1 - t) * 0.55;
     const inZone = !thresholdsEnabled || (history[r.idx] >= threshLo && history[r.idx] <= threshHi);
-    const rgb = inZone ? "139, 196, 138" : "255, 160, 60";
+    const rgb = notePaint(r.kind || "track", inZone).rgb;
     ctx.beginPath();
     ctx.arc(nx, ny, radius, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(${rgb}, ${alpha * 0.22})`;
@@ -4448,17 +4635,20 @@ window.addEventListener("resize", () => {
 });
 
 // ─── Pulsation du contour des pistes ───
-const pipLevel = { ambiance: 0, vegetal: 0, interaction: 0 };
+const pipLevel = { ambiance: 0, vegetal: 0, interaction: 0, quant: 0 };
 const pipEls = {};
 let pipRaf = 0;
 let pipLast = 0;
+const PIP_ROLES = ["vegetal", "interaction", "quant"];
 
 document.querySelectorAll(".role-pip").forEach((el) => {
   pipEls[el.dataset.role] = el;
 });
 
 function rolePipTarget(role, now) {
-  if (!routing[role] || !routing[role].on) return 0;
+  if (role === "quant") {
+    if (!G.quantOn) return 0;
+  } else if (!routing[role] || !routing[role].on) return 0;
   if (history.length < 2 || lastPulseAt <= 0) return 0;
   const age = (now - lastPulseAt) / 1000;
   const hold = 0.45;
@@ -4478,7 +4668,7 @@ function rolePipTarget(role, now) {
   return presence * gate * (floor + (1 - floor) * alive);
 }
 
-const pipStrCache = { ambiance: "", vegetal: "", interaction: "" };
+const pipStrCache = { ambiance: "", vegetal: "", interaction: "", quant: "" };
 
 function tickRolePips(now) {
   if (audioEnabled) {
@@ -4487,7 +4677,7 @@ function tickRolePips(now) {
   const dt = pipLast ? Math.min(0.05, (now - pipLast) / 1000) : 0.016;
   pipLast = now;
   const k = 1 - Math.exp(-dt / 0.16);
-  for (const role of ROLE_IDS) {
+  for (const role of PIP_ROLES) {
     const el = pipEls[role];
     if (!el) continue;
     const target = rolePipTarget(role, now);
@@ -4520,6 +4710,7 @@ function stopRolePips() {
 // ─── Démarrage ───
 // La page est servie par le Pico : le flux et le son partent avec la fenêtre.
 updateSpanButtons();
+bindZoomPop();
 setThresholdsEnabled(!!routing.interaction.on);
 maybePrefetchFaust();
 unlockAudio();
@@ -4529,6 +4720,9 @@ document.addEventListener("keydown", unlockAudio, { capture: true });
 // Sur iOS, pointerdown et touchstart ne comptent pas comme geste pour l'audio : touchend et click, si.
 document.addEventListener("touchend", unlockAudio, { capture: true });
 document.addEventListener("click", unlockAudio, { capture: true });
+// Délai : si le navigateur autorise l'autoplay, le contexte passe à « running » juste après
+// le chargement, et la puce ne doit pas clignoter.
+setTimeout(updateSoundChip, 600);
 
 // Un téléphone suspend l'onglet dès qu'il se verrouille : au retour, le flux et
 // le contexte audio doivent être relancés.
@@ -4540,6 +4734,7 @@ document.addEventListener("visibilitychange", () => {
   startRolePips();
   if (streamWanted && !streamLive) connect();
   if (audioEnabled) resumeFaustContexts();
+  updateSoundChip();
 });
 
 startRolePips();
@@ -4585,73 +4780,132 @@ function renderQuantPanel() {
   let html = `<section class="qz role-panel" id="qz" data-role="quant">`;
   html += `<div class="inst-row track-head">`;
   html += instOpenHtml(Quantizer.TIMBRES[q.timbre].label, qzSoundSummary(), true, "qzSoundOpen", "quant");
-  html += `<label class="switch" title="Activer le quantizer"><input type="checkbox" id="quantEnabled"${G.quantOn ? " checked" : ""} aria-label="Activer le quantizer"><span class="switch-ui"></span></label>`;
+  html += `<label class="switch" title="Activer Rythme"><input type="checkbox" id="quantEnabled"${G.quantOn ? " checked" : ""} aria-label="Activer Rythme"><span class="switch-ui"></span></label>`;
   html += `</div>`;
-  html += `<div class="track-volume"><div class="param-row qz-level"><div class="param-head"><span class="param-label">Volume</span></div>`;
-  html += `<input type="range" id="qzLevel" min="0" max="100" step="1" value="${q.level}"><span class="param-val">${Math.round(q.level)} %</span></div></div>`;
+  html += `<div class="track-volume"><div class="param-row"><div class="param-head"><span class="param-label">Volume</span>`;
+  html += `<button type="button" class="param-reset" data-reset-kind="quant" data-reset-id="level" title="Valeur par défaut" aria-label="Remettre Volume à la valeur par défaut"></button></div>`;
+  html += `<input type="range" id="qzLevel" min="0" max="100" step="1" value="${Math.round(q.level)}"><span class="param-val">${Math.round(q.level)} %</span></div></div>`;
   html += `<div class="role-settings${G.quantOn ? "" : " is-disabled"}">`;
   html += `<div class="sensor-readout"><span class="sensor-live" id="qzSub">${labels[Quantizer.level] || labels[0]}</span>`;
   html += `<span class="sensor-ratio"><span id="qzBpm">${P.bpm}</span> BPM · <span id="qzNote">—</span></span></div>`;
-  html += `<div class="qz-grid" id="qzGrid"></div>`;
-
-  html += `<div class="qz-meter" id="qzMeter" style="--t0:${th[0]};--t1:${th[1]};--t2:${th[2]};--v:0">`;
-  html += `<div class="qz-meter-rail"></div>`;
-  for (let i = 0; i < 4; i++) {
-    html += `<div class="qz-zone z${i}${i > q.cap ? " is-capped" : ""}"><span>${labels[i]}</span></div>`;
-  }
+  const u = qzLevelUnits();
+  html += `<div class="tz qz-tz" data-role="quant">`;
+  html += `<div class="tz-stage" id="qzMeter" style="--t0:${th[0]};--t1:${th[1]};--t2:${th[2]};` +
+    u.map((x, i) => `--u${i}:${x.toFixed(4)}`).join(";") + `;--v:0;--live:${u[Quantizer.level] ?? 0}">`;
+  html += `<div class="qz-grid" id="qzGrid" aria-hidden="true"></div>`;
+  html += `<svg class="tz-curve" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">` +
+    `<polygon class="tz-area" id="qzArea" points=""/><polyline class="tz-line" id="qzLine" points=""/></svg>`;
   for (let i = 0; i < 3; i++) {
-    html += `<div class="qz-th" data-i="${i}" role="slider" tabindex="0" aria-label="Seuil ${labels[i + 1]}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(th[i] * 100)}"><span></span></div>`;
+    html += `<div class="tz-th" data-i="${i}" role="slider" tabindex="0" aria-label="Seuil ${labels[i + 1]}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(th[i] * 100)}"><span></span></div>`;
   }
-  html += `<div class="qz-needle" id="qzNeedle"></div>`;
+  for (let i = 0; i < 4; i++) {
+    html += `<div class="tz-pt p${i}${i > q.cap ? " is-capped" : ""}"><span class="tz-tag">${labels[i]}</span></div>`;
+  }
+  html += `<div class="tz-live"></div><div class="tz-needle"><span></span></div>`;
   html += `</div>`;
-
-  html += `<div class="qz-pair">`;
-  html += `<div class="qz-block"><div class="qz-label"><span>Pas</span></div>`;
-  html += qzSegHtml("qzEvery", QZ_EVERY.map((v) => ({ v, l: String(v), title: v === 1 ? "Une note par temps" : `Une note tous les ${v} temps` })), q.every) + `</div>`;
-  html += `<div class="qz-block"><div class="qz-label"><span>Plafond</span></div>`;
-  html += qzSegHtml("qzCap", [1, 2, 3].map((v) => ({ v, l: labels[v] })), q.cap) + `</div>`;
   html += `</div>`;
-
-  html += `<div class="qz-chips">`;
-  html += qzChipHtml("qzTernary", "Ternaire", q.ternary);
-  html += qzChipHtml("qzTracks", "Pistes", q.withTracks);
-  html += qzChipHtml("qzDelay", "Delay", q.delayOn);
-  html += `</div>`;
-
-
   html += `</div></section>`;
   panel.innerHTML = html;
   bindQuantPanel(panel);
   panel.querySelector("#quantEnabled")?.addEventListener("change", (e) => setQuantOn(e.target.checked));
   panel.querySelector("#qzSoundOpen")?.addEventListener("click", () => openSheet("quant"));
   paintRanges(panel);
+  bindQuantLevel();
+  bindParamResets(panel);
   qzBuildGrid();
+  qzPaintCurve();
   qzWake();
   if (sheetKind === "quant") renderSheet();
 }
 
+// Hauteur de chaque palier : la subdivision monte d'un cran par trait, sans dépasser le plafond.
+function qzLevelUnits() {
+  const cap = G.quant.cap;
+  return [0, 1, 2, 3].map((i) => Math.min(i, cap) / 3);
+}
+
+// Escalier : chaque zone d'agitation joue sa subdivision, la marche se fait sur le trait.
+function qzPaintCurve() {
+  const stage = $("qzMeter");
+  if (!stage) return;
+  const th = G.quant.thresholds;
+  const u = qzLevelUnits();
+  const xs = [0, th[0], th[1], th[2], 1];
+  const y = (v) => (100 - v * 100).toFixed(2);
+  const pts = [];
+  for (let i = 0; i < 4; i++) {
+    pts.push(`${(xs[i] * 100).toFixed(2)},${y(u[i])}`, `${(xs[i + 1] * 100).toFixed(2)},${y(u[i])}`);
+  }
+  stage.querySelector("#qzLine")?.setAttribute("points", pts.join(" "));
+  stage.querySelector("#qzArea")?.setAttribute("points", "0,100 " + pts.join(" ") + " 100,100");
+}
+
 // Contenu du bottom sheet du quantizer : le son.
+function sheetCursorHtml(v, live) {
+  return `<div class="sheet-cursor" id="sheetCursor" style="--v:${v};--live:${live}">` +
+    `<span class="sheet-cursor-rail"></span><span class="sheet-cursor-needle"></span></div>`;
+}
+
+function sheetPreviewHtml(role) {
+  if (role === "quant") {
+    const labels = Quantizer.LABELS[qzMode()];
+    const v = (typeof quantVar === "number" ? quantVar : 0).toFixed(4);
+    return `<div class="sheet-preview role-settings" data-role="quant">` +
+      `<div class="sensor-readout"><span class="sensor-live" id="sheetQzSub">${labels[Quantizer.level] || labels[0]}</span></div>` +
+      sheetCursorHtml(v, "0.5") +
+      `<span class="sensor-ratio"><span id="sheetQzBpm">${P.bpm}</span> BPM · <span id="sheetQzNote">—</span></span></div>`;
+  }
+  const last = history.length ? history[history.length - 1] : NaN;
+  const tu = roleTierUnits(role);
+  const live = tu ? paramToUnit(tu.spec, roleParamValue(role, tu.spec.id, roleFilteredT01(role))) : 0.5;
+  return `<div class="sheet-preview role-settings" data-role="${role}">` +
+    `<div class="sensor-readout"><span class="sensor-live" id="sheetSensorLive">${formatUs(last)}</span></div>` +
+    sheetCursorHtml((typeof trackVar === "number" ? trackVar : 0).toFixed(4), live.toFixed(4)) +
+    `<span class="sensor-ratio" id="sheetSensorRatio">${formatRoleRatio(role)}</span></div>`;
+}
+
 function quantSheetHtml() {
   const q = G.quant;
+  const labels = Quantizer.LABELS[qzMode()];
   let html = `<div class="qz">`;
-  html += `<div class="qz-block"><div class="qz-label"><span>Instrument</span></div>`;
-  html += qzSegHtml("qzTimbre", Object.keys(Quantizer.TIMBRES).map((v) => ({ v, l: Quantizer.TIMBRES[v].label })), q.timbre) + `</div>`;
+  html += sheetPreviewHtml("quant");
+  html += `<button type="button" class="pick-open" id="qzPickOpen">` +
+    `<span class="pick-open-label">Instrument</span><span class="pick-open-name">${Quantizer.TIMBRES[q.timbre].label}</span>` +
+    `<svg class="inst-open-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>`;
+  html += `<div class="qz-pair sheet-card">`;
   html += `<div class="qz-block"><div class="qz-label"><span>Octave</span></div>`;
   html += qzSegHtml("qzOctave", [-2, -1, 0, 1, 2].map((v) => ({ v, l: v > 0 ? "+" + v : v === 0 ? "0" : "−" + -v })), q.octave) + `</div>`;
-  html += `<div class="qz-block"><div class="qz-label"><span>Gamme</span>`;
-  html += `<select class="inst-select qz-root" id="qzRoot" aria-label="Tonique">` +
+  const rootSelect = `<select class="inst-select qz-root" id="qzRoot" aria-label="Tonique">` +
     Quantizer.NOTE_NAMES.map((n, i) => `<option value="${i}"${i === q.root ? " selected" : ""}>${n}</option>`).join("") +
-    `</select></div>`;
-  html += qzSegHtml("qzScale", Object.keys(Quantizer.SCALES).map((v) => ({ v, l: Quantizer.SCALES[v].label })), q.scale) + `</div>`;
+    `</select>`;
+  if (isMobileSheet()) {
+    html += `<div class="qz-block qz-scale-row"><div class="qz-label"><span>Gamme</span></div>`;
+    html += rootSelect;
+    html += `<select class="inst-select qz-scale" id="qzScale" aria-label="Type de gamme">` +
+      Object.keys(Quantizer.SCALES).map((v) => `<option value="${v}"${v === q.scale ? " selected" : ""}>${Quantizer.SCALES[v].label}</option>`).join("") +
+      `</select></div>`;
+  } else {
+    html += `<div class="qz-block"><div class="qz-label"><span>Gamme</span>${rootSelect}</div>`;
+    html += qzSegHtml("qzScale", Object.keys(Quantizer.SCALES).map((v) => ({ v, l: Quantizer.SCALES[v].label })), q.scale) + `</div>`;
+  }
+  html += `<div class="qz-block"><div class="qz-label"><span>Pas</span></div>`;
+  html += qzSegHtml("qzEvery", QZ_EVERY.map((v) => ({ v, l: String(v), title: v === 1 ? "Une note par temps" : `Une note tous les ${v} temps` })), q.every) + `</div>`;
+  html += `<div class="qz-block"><div class="qz-label"><span>Plafond</span></div>`;
+  html += qzSegHtml("qzCap", [1, 2, 3].map((v) => ({ v, l: labels[v] })), q.cap) + `</div>`;
+  html += `<div class="qz-block"><div class="qz-label"><span>Ternaire</span></div>`;
+  html += `<label class="switch" title="Triolets"><input type="checkbox" id="qzTernary"${q.ternary ? " checked" : ""} aria-label="Ternaire"><span class="switch-ui"></span></label></div>`;
+  html += `<div class="qz-block"><div class="qz-label"><span>Delay</span></div>`;
+  html += `<label class="switch" title="Delay"><input type="checkbox" id="qzDelay"${q.delayOn ? " checked" : ""} aria-label="Delay"><span class="switch-ui"></span></label></div>`;
   if (q.delayOn) {
     const dl = { 0.5: "1/8", 0.75: "1/8 ·", 1: "1/4", 1.5: "1/4 ·", 2: "1/2" };
-    html += `<div class="qz-block"><div class="qz-label"><span>Delay</span></div>`;
+    html += `<div class="qz-block"><div class="qz-label"><span>Temps</span></div>`;
     html += qzSegHtml("qzDelayBeats", Quantizer.DELAY_BEATS.map((v) => ({ v, l: dl[v] })), q.delayBeats) + `</div>`;
     html += `<div class="param-row qz-level"><div class="param-head"><span class="param-label">Retour</span></div>`;
     html += `<input type="range" id="qzDelayFb" min="0" max="90" step="1" value="${q.delayFb}"><span class="param-val">${Math.round(q.delayFb)} %</span></div>`;
-    html += `<div class="param-row qz-level"><div class="param-head"><span class="param-label">Niveau delay</span></div>`;
+    html += `<div class="param-row qz-level"><div class="param-head"><span class="param-label">Niveau</span></div>`;
     html += `<input type="range" id="qzDelayMix" min="0" max="100" step="1" value="${q.delayMix}"><span class="param-val">${Math.round(q.delayMix)} %</span></div>`;
   }
+  html += `</div>`;
   html += `</div>`;
   return html;
 }
@@ -4660,13 +4914,43 @@ function qzApply(patch, rerender) {
   G.quant = Quantizer.sanitize(Object.assign({}, G.quant, patch));
   Quantizer.configure(G.quant);
   persistConfig();
+  syncQuantLevelSlider();
   if (rerender) renderQuantPanel();
   else {
     const name = document.querySelector("#qzSoundOpen .inst-open-name");
     const sub = document.querySelector("#qzSoundOpen .inst-open-sub");
     if (name) name.textContent = Quantizer.TIMBRES[G.quant.timbre].label;
     if (sub) sub.textContent = qzSoundSummary();
+    const pickName = document.querySelector("#qzPickOpen .pick-open-name");
+    if (pickName) pickName.textContent = Quantizer.TIMBRES[G.quant.timbre].label;
+    const sheetInst = $("sheetInst");
+    if (sheetInst && sheetKind === "quant") sheetInst.textContent = Quantizer.TIMBRES[G.quant.timbre].label;
   }
+}
+
+function syncQuantLevelSlider() {
+  const level = $("qzLevel");
+  if (!level || !G.quant) return;
+  if (document.activeElement === level) return;
+  level.value = String(Math.round(G.quant.level));
+  paintRange(level);
+  const val = level.closest(".param-row")?.querySelector(".param-val");
+  if (val) val.textContent = Math.round(G.quant.level) + " %";
+  syncResetButton(level.closest(".param-row")?.querySelector(".param-reset"));
+}
+
+function bindQuantLevel() {
+  const level = $("qzLevel");
+  if (!level || level.dataset.bound === "1") return;
+  level.addEventListener("input", () => {
+    const val = level.closest(".param-row")?.querySelector(".param-val");
+    if (val) val.textContent = level.value + " %";
+    paintRange(level);
+    qzApply({ level: Number(level.value) });
+    syncResetButton(level.closest(".param-row")?.querySelector(".param-reset"));
+  });
+  level.dataset.bound = "1";
+  syncQuantLevelSlider();
 }
 
 function qzBindSeg(panel, id, key, cast) {
@@ -4687,16 +4971,14 @@ function qzBindSeg(panel, id, key, cast) {
 function bindQuantPanel(panel) {
   qzBindSeg(panel, "qzEvery", "every", Number);
   qzBindSeg(panel, "qzCap", "cap", Number);
-  qzBindSeg(panel, "qzTimbre", "timbre", String);
-  qzBindSeg(panel, "qzScale", "scale", String);
+  const scaleSel = panel.querySelector("select#qzScale");
+  if (scaleSel) scaleSel.addEventListener("change", (e) => qzApply({ scale: e.target.value }));
+  else qzBindSeg(panel, "qzScale", "scale", String);
   qzBindSeg(panel, "qzOctave", "octave", Number);
   qzBindSeg(panel, "qzDelayBeats", "delayBeats", Number);
-  const chip = (id, fn) => panel.querySelector("#" + id)?.addEventListener("click", (e) => {
-    const on = e.currentTarget.getAttribute("aria-pressed") !== "true";
-    e.currentTarget.setAttribute("aria-pressed", on ? "true" : "false");
-    fn(on);
-  });
-  chip("qzDelay", (on) => qzApply({ delayOn: on }, true));
+  panel.querySelector("#qzTernary")?.addEventListener("change", (e) => qzApply({ ternary: e.target.checked }, true));
+  panel.querySelector("#qzDelay")?.addEventListener("change", (e) => qzApply({ delayOn: e.target.checked }, true));
+  panel.querySelector("#qzPickOpen")?.addEventListener("click", () => openTimbrePicker());
   for (const [id, key] of [["qzDelayFb", "delayFb"], ["qzDelayMix", "delayMix"]]) {
     const el = panel.querySelector("#" + id);
     el?.addEventListener("input", () => {
@@ -4705,19 +4987,7 @@ function bindQuantPanel(panel) {
       qzApply({ [key]: Number(el.value) });
     });
   }
-  chip("qzTracks", (on) => {
-    qzApply({ withTracks: on });
-    document.body.classList.toggle("quant-tracks", !!G.quant.withTracks);
-    syncFaustRoleGains();
-  });
-  chip("qzTernary", (on) => qzApply({ ternary: on }, true));
   panel.querySelector("#qzRoot")?.addEventListener("change", (e) => qzApply({ root: Number(e.target.value) }));
-  const level = panel.querySelector("#qzLevel");
-  level?.addEventListener("input", () => {
-    const val = level.closest(".param-row")?.querySelector(".param-val");
-    if (val) val.textContent = level.value + " %";
-    qzApply({ level: Number(level.value) });
-  });
 
   // Seuils : trois bornes sur la jauge d'agitation, qui ne se croisent pas.
   const meter = panel.querySelector("#qzMeter");
@@ -4734,8 +5004,9 @@ function bindQuantPanel(panel) {
     th[i] = clamp(v, lo, hi);
     G.quant.thresholds = th;
     meter.style.setProperty("--t" + i, th[i].toFixed(4));
-    meter.querySelector(`.qz-th[data-i="${i}"]`)?.setAttribute("aria-valuenow", String(Math.round(th[i] * 100)));
+    meter.querySelector(`.tz-th[data-i="${i}"]`)?.setAttribute("aria-valuenow", String(Math.round(th[i] * 100)));
     Quantizer.configure(G.quant);
+    qzPaintCurve();
   };
   meter.addEventListener("pointerdown", (e) => {
     const x = unitAt(e.clientX);
@@ -4745,7 +5016,7 @@ function bindQuantPanel(panel) {
     e.preventDefault();
     drag = { i: best, id: e.pointerId };
     meter.classList.add("is-grabbing");
-    meter.querySelector(`.qz-th[data-i="${best}"]`)?.classList.add("is-active");
+    meter.querySelector(`.tz-th[data-i="${best}"]`)?.classList.add("is-active");
     try { meter.setPointerCapture(e.pointerId); } catch (_) { /* */ }
     setTh(best, x);
   });
@@ -4755,13 +5026,13 @@ function bindQuantPanel(panel) {
   const end = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     meter.classList.remove("is-grabbing");
-    meter.querySelectorAll(".qz-th.is-active").forEach((el) => el.classList.remove("is-active"));
+    meter.querySelectorAll(".tz-th.is-active").forEach((el) => el.classList.remove("is-active"));
     drag = null;
     persistConfig();
   };
   meter.addEventListener("pointerup", end);
   meter.addEventListener("pointercancel", end);
-  meter.querySelectorAll(".qz-th").forEach((el) => {
+  meter.querySelectorAll(".tz-th").forEach((el) => {
     el.addEventListener("keydown", (e) => {
       const step = e.key === "ArrowRight" || e.key === "ArrowUp" ? 0.02 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -0.02 : 0;
       if (!step) return;
@@ -4793,7 +5064,12 @@ function qzFrame() {
   const panel = $("quantPanel");
   if (!panel || panel.hidden || !settingsOpen) return;
   const meter = $("qzMeter");
-  if (meter) meter.style.setProperty("--v", quantVar.toFixed(4));
+  if (meter) {
+    meter.style.setProperty("--v", quantVar.toFixed(4));
+    meter.style.setProperty("--live", (qzLevelUnits()[Quantizer.level] ?? 0).toFixed(4));
+  }
+  const cursor = $("sheetCursor");
+  if (cursor) cursor.style.setProperty("--v", quantVar.toFixed(4));
   qzRaf = requestAnimationFrame(qzFrame);
 }
 
@@ -4801,25 +5077,29 @@ function qzWake() {
   if (!qzRaf && G.quantOn && settingsOpen) qzRaf = requestAnimationFrame(qzFrame);
 }
 
+function flashQuantGlyph(onBeat) {
+  const el = $("quantToggle");
+  if (!el) return;
+  el.classList.remove("is-hit", "on-beat", "off-beat");
+  void el.offsetWidth;
+  el.classList.add("is-hit", onBeat ? "on-beat" : "off-beat");
+}
+
 function onQuantNote(info) {
   if (!G.quantOn) return;
-  if (history.length) markNoteIndex(history.length - 1);
-  const btn = $("quantToggle");
-  if (btn) {
-    btn.classList.remove("is-hit");
-    void btn.offsetWidth;
-    btn.classList.add("is-hit", info.onBeat ? "on-beat" : "off-beat");
-    if (!info.onBeat) btn.classList.remove("on-beat"); else btn.classList.remove("off-beat");
-  }
+  if (history.length) markNoteIndex(history.length - 1, "quant");
+  flashQuantGlyph(!!info.onBeat);
   const panel = $("quantPanel");
   if (!panel || panel.hidden) return;
   const sub = $("qzSub");
+  const sheetSub = $("sheetQzSub");
   if (sub && sub.textContent !== info.label) {
     sub.textContent = info.label;
     sub.classList.remove("is-shift");
     void sub.offsetWidth;
     sub.classList.add("is-shift");
   }
+  if (sheetSub) sheetSub.textContent = info.label;
   const grid = $("qzGrid");
   if (grid && Number(grid.dataset.steps) !== info.stepsPerCycle) qzBuildGrid();
   const cell = grid && grid.children[info.step];
@@ -4829,9 +5109,14 @@ function onQuantNote(info) {
     cell.classList.add("is-hit");
   }
   const note = $("qzNote");
-  if (note) note.textContent = Quantizer.NOTE_NAMES[info.midi % 12] + (Math.floor(info.midi / 12) - 1);
+  const noteText = Quantizer.NOTE_NAMES[info.midi % 12] + (Math.floor(info.midi / 12) - 1);
+  if (note) note.textContent = noteText;
+  const sheetNote = $("sheetQzNote");
+  if (sheetNote) sheetNote.textContent = noteText;
   const bpm = $("qzBpm");
   if (bpm) bpm.textContent = String(P.bpm);
+  const sheetBpm = $("sheetQzBpm");
+  if (sheetBpm) sheetBpm.textContent = String(P.bpm);
 }
 
 // Aligne bouton, moteur, panneaux et gains sur G.quantOn.
@@ -4841,7 +5126,7 @@ function syncQuantState() {
   if (G.quantOn && audioEnabled) Quantizer.start();
   if (!G.quantOn) Quantizer.stop();
   syncFaustRoleGains();
-  if (G.quantOn) renderQuantPanel();
+  if (G.quantOn || ($("quantPanel") && !$("quantPanel").hidden)) renderQuantPanel();
   updatePanels();
 }
 
@@ -4876,6 +5161,7 @@ if (window.Quantizer) {
   });
   Quantizer.configure(G.quant);
   Quantizer.onNote(onQuantNote);
+  bindQuantLevel();
   document.body.classList.toggle("quant-on", !!G.quantOn);
   document.body.classList.toggle("quant-tracks", !!G.quant.withTracks);
   if (G.quantOn) renderQuantPanel();
@@ -4889,9 +5175,8 @@ var sheetKind = "";
 
 // En-tête d'instrument (benchmark Spotify / Garmin) : vignette au picto de la piste, nom,
 // paramètre piloté ; l'interrupteur vit à droite, dans la même ligne.
-function instOpenHtml(name, sub, enabled, id, role) {
-  const glyph = role ? document.querySelector(`.role-pip[data-role="${role}"] svg`) : null;
-  const icon = glyph ? `<span class="track-icon" aria-hidden="true">${glyph.outerHTML}</span>` : "";
+function instOpenHtml(name, sub, enabled, id) {
+  const icon = `<span class="track-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.7"/></svg></span>`;
   return `<button type="button" class="inst-open" id="${id || "instOpen"}"${enabled ? "" : " disabled"}>` + icon +
     `<span class="inst-open-text"><span class="inst-open-name">${name}</span><span class="inst-open-sub">${sub}</span></span>` +
     `<svg class="inst-open-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>`;
@@ -4924,7 +5209,8 @@ function linkedLabel(role) {
 function roleSheetHtml(role) {
   const r = routing[role];
   const t01 = smoothedT01[role] ?? roleLinkT01(role);
-  let html = `<button type="button" class="pick-open role-panel" data-role="${role}" id="pickOpen">` +
+  let html = sheetPreviewHtml(role);
+  html += `<button type="button" class="pick-open role-panel" data-role="${role}" id="pickOpen">` +
     `<span class="pick-open-label">Instrument</span><span class="pick-open-name">${INST[r.inst].label}</span>` +
     `<svg class="inst-open-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>`;
   html += `<div class="sheet-sec sheet-card role-panel" data-role="${role}">`;
@@ -4955,38 +5241,53 @@ function pickListHtml(role) {
   const r = routing[role];
   return `<div class="pick-list role-panel" data-role="${role}" role="radiogroup" aria-label="Instrument">` + Object.keys(INST).map((id) => {
     const used = roleUsesInst(id);
-    const other = used && used !== role ? `<span class="pick-row-sub">${ROLE_META[used].title}</span>` : "";
-    return `<button type="button" class="pick-row" role="radio" data-inst="${id}" aria-checked="${id === r.inst}">` +
-      `<span class="pick-row-name">${INST[id].label}</span>${other}` +
+    const taken = used && used !== role;
+    return `<button type="button" class="pick-row${taken ? " is-taken" : ""}" role="radio" data-inst="${id}"${taken ? ` data-used="${used}" aria-disabled="true"` : ""} aria-checked="${id === r.inst}">` +
+      `<span class="pick-row-name">${INST[id].label}</span>` +
       `<svg class="pick-row-check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.4 6.6 11.4 12.5 4.8"/></svg></button>`;
   }).join("") + `</div>`;
 }
 
+// La liste reste ouverte après un choix : on peut essayer plusieurs instruments à la suite.
+function markPicked(list, key, current) {
+  list?.querySelectorAll(".pick-row").forEach((b) => {
+    b.setAttribute("aria-checked", b.dataset[key] === current ? "true" : "false");
+  });
+}
+
 function openPicker(role) {
+  const inline = () => {
+    const host = document.querySelector(".inst-inline");
+    if (!host || host.querySelector(".pick-list")) return;
+    host.querySelector("#pickOpen")?.insertAdjacentHTML("afterend", pickListHtml(role));
+    host.querySelector(".pick-list")?.addEventListener("click", choose);
+  };
   const choose = (e) => {
     const row = e.target.closest(".pick-row");
-    if (!row) return;
-    closePicker();
+    if (!row || row.classList.contains("is-taken")) return;
+    const list = e.currentTarget;
     if (row.dataset.inst !== routing[role].inst) setRoleInstrument(role, row.dataset.inst);
+    markPicked(list, "inst", routing[role].inst);
+    if (!isMobileSheet()) inline();
   };
   if (!isMobileSheet()) {
-    const host = document.querySelector(".inst-inline");
-    if (!host) return;
-    const open = host.querySelector(".pick-list");
+    const open = document.querySelector(".inst-inline .pick-list");
     if (open) { open.remove(); return; }
-    host.querySelector("#pickOpen")?.insertAdjacentHTML("afterend", pickListHtml(role));
-    host.querySelector(".pick-list").addEventListener("click", choose);
+    inline();
     return;
   }
   const sheet = $("pickSheet");
   const body = $("pickBody");
+  sheet.dataset.role = role;
+  const roleEl = $("pickRole");
+  if (roleEl) roleEl.textContent = TRACK_LABELS[role] || "Piste";
   body.innerHTML = pickListHtml(role);
   body.firstElementChild.addEventListener("click", choose);
   sheet.hidden = false;
   sheet.setAttribute("aria-hidden", "false");
   $("pickBackdrop")?.classList.add("open");
   requestAnimationFrame(() => sheet.classList.add("open"));
-  body.querySelector('.pick-row[aria-checked="true"]')?.scrollIntoView({ block: "center" });
+  body.scrollTop = 0;
 }
 
 function closePicker() {
@@ -4997,6 +5298,46 @@ function closePicker() {
   sheet.setAttribute("aria-hidden", "true");
   $("pickBackdrop")?.classList.remove("open");
   setTimeout(() => { if (!sheet.classList.contains("open")) sheet.hidden = true; }, 320);
+}
+
+function timbreListHtml() {
+  const current = G.quant.timbre;
+  return `<div class="pick-list" data-role="quant" role="radiogroup" aria-label="Instrument">` +
+    Object.keys(Quantizer.TIMBRES).map((id) => {
+      return `<button type="button" class="pick-row" role="radio" data-timbre="${id}" aria-checked="${id === current}">` +
+        `<span class="pick-row-name">${Quantizer.TIMBRES[id].label}</span>` +
+        `<svg class="pick-row-check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.4 6.6 11.4 12.5 4.8"/></svg></button>`;
+    }).join("") + `</div>`;
+}
+
+function openTimbrePicker() {
+  const choose = (e) => {
+    const row = e.target.closest("[data-timbre]");
+    if (!row) return;
+    if (row.dataset.timbre !== G.quant.timbre) qzApply({ timbre: row.dataset.timbre });
+    markPicked(e.currentTarget, "timbre", G.quant.timbre);
+  };
+  if (!isMobileSheet()) {
+    const host = document.querySelector(".inst-inline");
+    if (!host) return;
+    const open = host.querySelector('.pick-list[data-role="quant"]');
+    if (open) { open.remove(); return; }
+    host.querySelector("#qzPickOpen")?.insertAdjacentHTML("afterend", timbreListHtml());
+    host.querySelector('.pick-list[data-role="quant"]')?.addEventListener("click", choose);
+    return;
+  }
+  const sheet = $("pickSheet");
+  const body = $("pickBody");
+  sheet.dataset.role = "quant";
+  const roleEl = $("pickRole");
+  if (roleEl) roleEl.textContent = TRACK_LABELS.quant;
+  body.innerHTML = timbreListHtml();
+  body.firstElementChild.addEventListener("click", choose);
+  sheet.hidden = false;
+  sheet.setAttribute("aria-hidden", "false");
+  $("pickBackdrop")?.classList.add("open");
+  requestAnimationFrame(() => sheet.classList.add("open"));
+  body.scrollTop = 0;
 }
 
 function bindRoleSheet(body, role) {
@@ -5028,30 +5369,35 @@ function isMobileSheet() {
 function sheetTargets() {
   if (isMobileSheet()) return { sheet: $("instSheet"), body: $("sheetBody"), title: $("sheetTitle") };
   const panel = sheetKind === "quant" ? $("quantPanel") : $("rolePanel");
-  const row = panel && panel.querySelector(".inst-row");
-  if (!row) return null;
+  const anchor = panel && (panel.querySelector(".role-settings") || panel.querySelector(".inst-row"));
+  if (!anchor) return null;
   let host = panel.querySelector(".inst-inline");
   if (!host) {
     host = document.createElement("div");
     host.className = "inst-inline";
-    row.after(host);
+    anchor.after(host);
   }
   return { sheet: null, body: host, title: null };
 }
 
-function renderSheet() {
+function renderSheet(resetScroll) {
   const t = sheetKind ? sheetTargets() : null;
   if (!t || !t.body) return;
   const { sheet, body, title } = t;
-  const scroll = body.scrollTop;
+  const scroll = resetScroll ? 0 : body.scrollTop;
   if (sheetKind === "quant") {
-    if (title) title.textContent = "Quantizer";
+    if (title) title.textContent = TRACK_LABELS.quant;
+    if (sheet) sheet.dataset.role = "quant";
+    const instEl = $("sheetInst");
+    if (instEl) instEl.textContent = Quantizer.TIMBRES[G.quant.timbre].label;
     body.innerHTML = quantSheetHtml();
     bindQuantPanel(body);
   } else {
     const role = uiRole;
     if (title) title.textContent = ROLE_META[role] ? ROLE_META[role].title : "Piste";
     if (sheet) sheet.dataset.role = role;
+    const instEl = $("sheetInst");
+    if (instEl) instEl.textContent = INST[routing[role].inst] ? INST[routing[role].inst].label : "—";
     body.innerHTML = roleSheetHtml(role);
     bindRoleSheet(body, role);
   }
@@ -5072,7 +5418,7 @@ function openSheet(kind) {
     }
     closeSheet();
     sheetKind = kind;
-    renderSheet();
+    renderSheet(true);
     const host = document.querySelector(".inst-inline");
     if (host) {
       host.classList.add("is-entering");
@@ -5081,7 +5427,7 @@ function openSheet(kind) {
     return;
   }
   sheetKind = kind;
-  renderSheet();
+  renderSheet(true);
   const sheet = $("instSheet");
   sheet.classList.add("is-entering");
   sheet.hidden = false;
@@ -5089,7 +5435,7 @@ function openSheet(kind) {
   $("sheetBackdrop")?.classList.add("open");
   requestAnimationFrame(() => sheet.classList.add("open"));
   setTimeout(() => sheet.classList.remove("is-entering"), 420);
-  sheet.querySelector(".sheet-close")?.focus({ preventScroll: true });
+  sheet.focus({ preventScroll: true });
 }
 
 function closeSheet() {
@@ -5235,51 +5581,69 @@ document.addEventListener("input", (e) => {
 })();
 
 
-// Sur mobile, les mesures (max, min, impulsions/s, moyenne, total) passent en une ligne en haut.
+// Les deux lectures utiles restent en haut à droite, sur mobile comme sur desktop.
 (function placeStats() {
-  const mq = window.matchMedia ? window.matchMedia("(max-width: 640px)") : null;
   const top = $("topStats");
-  const max = document.querySelector(".stat-max");
-  const min = document.querySelector(".stat-min");
-  const stats = document.querySelector(".bottom-right .stats");
-  const home = document.querySelector(".bottom-right");
-  if (!mq || !top || !max || !min || !stats || !home) return;
-  const anchor = document.createComment("stats");
-  max.before(anchor);
-  const apply = () => {
-    if (mq.matches) {
-      top.append(max, min, stats);
-    } else {
-      anchor.after(max, min);
-      home.append(stats);
-    }
-  };
-  apply();
-  mq.addEventListener ? mq.addEventListener("change", apply) : mq.addListener(apply);
+  const stats = document.querySelector(".stats");
+  if (!top || !stats) return;
+  top.append(stats);
 })();
 
-// Sur mobile, le dock sort de la barre du haut : la barre forme sa propre couche (z-index 40),
-// et le dock resterait au-dessus des bottom sheets quel que soit son z-index.
-(function placeDock() {
-  const mq = window.matchMedia ? window.matchMedia("(max-width: 640px)") : null;
-  const pips = $("rolePips");
-  if (!mq || !pips) return;
-  const anchor = document.createComment("dock");
-  pips.before(anchor);
-  const apply = () => {
-    if (mq.matches) document.body.appendChild(pips);
-    else anchor.after(pips);
-  };
-  apply();
-  mq.addEventListener ? mq.addEventListener("change", apply) : mq.addListener(apply);
-})();
+placeTrackIcons();
+window.addEventListener("resize", placeTrackIcons);
 
-// La hauteur du panneau (bottom sheet sur mobile) est exposée en CSS : la courbe se cale au-dessus.
+// Hauteur du panneau de piste, lue sans toucher à l'affichage : le graphe reste visible.
+var measuringRoleSheet = false;
+
+// Réglages, fichier et à propos prennent la hauteur de la piste, même si elle n'a jamais été ouverte :
+// on l'affiche le temps d'une lecture synchrone, sans rendu intermédiaire.
+function measureHiddenRoleSheet(panel) {
+  const showQuant = uiRole === "quant";
+  const target = $(showQuant ? "quantPanel" : "rolePanel");
+  if (!target || !target.firstElementChild) return 0;
+  const ids = ["rolePanel", "quantPanel", "infoPanel", "filesPanel", "aboutPanel"];
+  const saved = ids.map((id) => [$(id), $(id)?.hidden]);
+  const bodyClass = document.body.className;
+  const scroller = panel.querySelector(".settings-body");
+  const scrollTop = scroller ? scroller.scrollTop : 0;
+  ids.forEach((id) => { const el = $(id); if (el) el.hidden = el !== target; });
+  document.body.classList.add("panel-role");
+  document.body.classList.remove("view-params");
+  const h = panel.offsetHeight;
+  document.body.className = bodyClass;
+  saved.forEach(([el, hidden]) => { if (el) el.hidden = hidden; });
+  if (scroller) scroller.scrollTop = scrollTop;
+  return h;
+}
+
+function rememberRoleSheetHeight() {
+  if (measuringRoleSheet) return;
+  if (window.matchMedia && window.matchMedia("(min-width: 641px)").matches) return;
+  const panel = $("settingsPanel");
+  if (!panel || !document.body.classList.contains("settings-open")) return;
+  measuringRoleSheet = true;
+  const root = document.documentElement.style;
+  if (!document.body.classList.contains("panel-role")) {
+    const roleH = measureHiddenRoleSheet(panel);
+    if (roleH >= 80) root.setProperty("--role-sheet-h", roleH + "px");
+  }
+  const h = panel.offsetHeight;
+  if (h >= 80) {
+    root.setProperty("--sheet-h", h + "px");
+    if (document.body.classList.contains("panel-role")) root.setProperty("--role-sheet-h", h + "px");
+  }
+  measuringRoleSheet = false;
+}
 (function trackSheetHeight() {
   const panel = $("settingsPanel");
   if (!panel || !window.ResizeObserver) return;
   new ResizeObserver(() => {
-    document.documentElement.style.setProperty("--sheet-h", panel.offsetHeight + "px");
+    rememberRoleSheetHeight();
     requestGraphRedraw();
   }).observe(panel);
 })();
+// La barre du navigateur et le plein écran changent la hauteur visible : on remesure.
+window.addEventListener("resize", () => {
+  rememberRoleSheetHeight();
+  requestGraphRedraw();
+});

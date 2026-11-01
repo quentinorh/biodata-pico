@@ -281,8 +281,8 @@
     root: 9,
     level: 70,
     octave: 0,
-    // Les pistes Faust continuent de jouer sous le quantizer.
-    withTracks: false,
+    // Les pistes Faust jouent en même temps. L'option pour les couper n'est plus proposée.
+    withTracks: true,
     // Delay calé sur le BPM : durée en temps, retour et niveau en %.
     delayOn: false,
     delayBeats: 0.75,
@@ -303,7 +303,7 @@
     if (Number.isFinite(src.root)) out.root = ((Math.round(src.root) % 12) + 12) % 12;
     if (Number.isFinite(src.level)) out.level = Math.max(0, Math.min(100, src.level));
     if (Number.isFinite(src.octave)) out.octave = Math.max(-2, Math.min(2, Math.round(src.octave)));
-    if (typeof src.withTracks === "boolean") out.withTracks = src.withTracks;
+    out.withTracks = true;
     if (typeof src.delayOn === "boolean") out.delayOn = src.delayOn;
     if (DELAY_BEATS.indexOf(src.delayBeats) !== -1) out.delayBeats = src.delayBeats;
     if (Number.isFinite(src.delayFb)) out.delayFb = Math.max(0, Math.min(90, src.delayFb));

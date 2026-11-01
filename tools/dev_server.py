@@ -390,6 +390,13 @@ if __name__ == "__main__":
     if args.replay:
         sensor = ReplaySensor(args.replay)
         print("Rejoue %d périodes de %s" % (len(sensor.recorded), args.replay))
+    # Sous Windows, SO_REUSEADDR laisse un second serveur se lier au même port sans erreur :
+    # les requêtes partent alors vers l'ancien processus.
+    ThreadingHTTPServer.allow_reuse_address = False
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    except OSError:
+        raise SystemExit("Port %d déjà utilisé : un autre serveur tourne (fermez-le ou utilisez --port)." % args.port)
     sensor.start()
     print("Interface : http://localhost:%d" % args.port)
-    ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()
+    server.serve_forever()

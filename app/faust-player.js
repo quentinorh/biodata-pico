@@ -137,14 +137,14 @@
     return curve;
   }
 
-  // Réverbes d'église : réponses impulsionnelles synthétiques, en envoi sur le bus master.
+  // Réponses impulsionnelles synthétiques, en envoi sur le bus master.
   // rt60 : décroissance de 60 dB (s) ; damp : fréquence de coupure de la queue en fin de décroissance.
   const REVERBS = {
-    romane: { label: "Église romane", rt60: 3.6, pre: 0.022, early: 0.5, bright: 6500, damp: 1400, lowcut: 110 },
-    abbatiale: { label: "Abbatiale", rt60: 5.2, pre: 0.034, early: 0.42, bright: 7000, damp: 1100, lowcut: 95 },
-    cathedrale: { label: "Cathédrale gothique", rt60: 7.4, pre: 0.048, early: 0.36, bright: 7500, damp: 900, lowcut: 85 },
-    basilique: { label: "Basilique", rt60: 10.5, pre: 0.065, early: 0.3, bright: 6800, damp: 750, lowcut: 75 },
-    crypte: { label: "Crypte sous la nef", rt60: 4.6, pre: 0.012, early: 0.7, bright: 3200, damp: 520, lowcut: 140 },
+    romane: { label: "Claire", rt60: 3.6, pre: 0.022, early: 0.5, bright: 6500, damp: 1400, lowcut: 110 },
+    abbatiale: { label: "Ample", rt60: 5.2, pre: 0.034, early: 0.42, bright: 7000, damp: 1100, lowcut: 95 },
+    cathedrale: { label: "Longue", rt60: 7.4, pre: 0.048, early: 0.36, bright: 7500, damp: 900, lowcut: 85 },
+    basilique: { label: "Vaste", rt60: 10.5, pre: 0.065, early: 0.3, bright: 6800, damp: 750, lowcut: 75 },
+    crypte: { label: "Sourde", rt60: 4.6, pre: 0.012, early: 0.7, bright: 3200, damp: 520, lowcut: 140 },
   };
   const reverbState = { id: "", mix: 0.35 };
   const irCache = Object.create(null);

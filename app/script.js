@@ -516,10 +516,11 @@ const DEFAULT_MOD_SMOOTH = 0.3;
 const DEFAULT_MOD_AMOUNT = 75;
 const DEFAULT_MOD_SENSE = 60;
 const DEFAULT_MOD_MOTION = 45;
+const DEFAULT_MOD_CURVE = 0;
 const ROLE_MOD_DEFAULTS = {
-  ambiance: { modSmooth: 0.8, modAmount: 70, modSense: 45, modMotion: 35, modInvert: false },
-  vegetal: { modSmooth: 0.3, modAmount: 80, modSense: 70, modMotion: 50, modInvert: false },
-  interaction: { modSmooth: 0.1, modAmount: 85, modSense: 75, modMotion: 40, modInvert: false },
+  ambiance: { modSmooth: 0.8, modAmount: 70, modSense: 45, modMotion: 35, modCurve: DEFAULT_MOD_CURVE, modInvert: false },
+  vegetal: { modSmooth: 0.3, modAmount: 80, modSense: 70, modMotion: 50, modCurve: DEFAULT_MOD_CURVE, modInvert: false },
+  interaction: { modSmooth: 0.1, modAmount: 85, modSense: 75, modMotion: 40, modCurve: DEFAULT_MOD_CURVE, modInvert: false },
 };
 let legacyModSmooth = DEFAULT_MOD_SMOOTH;
 let legacyModAmount = DEFAULT_MOD_AMOUNT;
@@ -571,6 +572,41 @@ function roleModMotion(role) {
   return Number.isFinite(v) ? clamp(v, 0, 100) : roleModDef(role, "modMotion");
 }
 
+function roleModCurve(role) {
+  const v = routing[role] && (routing[role].modCurve ?? routing[role].curve);
+  return Number.isFinite(v) ? clamp(v, 0, 100) : roleModDef(role, "modCurve");
+}
+
+function applySignalCurve(x, curvePct) {
+  const v = clamp(x, 0, 1);
+  const c = clamp(curvePct || 0, 0, 100) / 100;
+  if (c <= 0 || v <= 0 || v >= 1) return v;
+  return Math.pow(v, Math.pow(4, -c));
+}
+
+function signalCurvePoints(curvePct) {
+  const steps = 36;
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = t * t * t;
+    const y = applySignalCurve(x, curvePct);
+    pts.push(`${(x * 100).toFixed(2)},${(100 - y * 100).toFixed(2)}`);
+  }
+  return pts.join(" ");
+}
+
+let quantVar = 0;
+let trackVar = 0;
+
+function roleCurvedVar(role) {
+  return applySignalCurve(trackVar, roleModCurve(role));
+}
+
+function quantCurvedVar() {
+  return applySignalCurve(quantVar, G.quant && G.quant.curve);
+}
+
 function roleModInvert(role) {
   return !!(routing[role] && routing[role].modInvert);
 }
@@ -596,7 +632,8 @@ function formatParamVal(key, raw) {
   switch (key) {
     case "masterVol": case "ambientVol":
     case "vegetalVol": case "interVol":
-    case "modAmount": case "modSense": case "modMotion": return raw + "%";
+    case "modAmount": case "modSense": case "modMotion":
+    case "modCurve": case "curve": return Math.round(raw) + "%";
     case "modSmooth": case "smooth": return formatSmooth(raw);
     case "bpm": return String(raw);
     default: return String(raw);
@@ -654,6 +691,7 @@ function defaultRoleMod(role) {
     modAmount: d.modAmount,
     modSense: d.modSense,
     modMotion: d.modMotion,
+    modCurve: d.modCurve,
     modInvert: d.modInvert,
   };
 }
@@ -757,10 +795,12 @@ function applyRoleModPatch(target, role, src) {
     target.modAmount = defs.modAmount;
     target.modSense = defs.modSense;
     target.modMotion = defs.modMotion;
+    target.modCurve = defs.modCurve;
     target.modInvert = defs.modInvert;
     return;
   }
-  const hasNew = Number.isFinite(src.modSense) || Number.isFinite(src.modMotion);
+  const rawCurve = Number.isFinite(src.modCurve) ? src.modCurve : src.curve;
+  const hasNew = Number.isFinite(src.modSense) || Number.isFinite(src.modMotion) || Number.isFinite(rawCurve);
   if (hasNew) {
     target.modSmooth = Number.isFinite(src.modSmooth)
       ? migrateModSmooth(src.modSmooth, defs.modSmooth)
@@ -768,6 +808,7 @@ function applyRoleModPatch(target, role, src) {
     target.modAmount = Number.isFinite(src.modAmount) ? clamp(src.modAmount, 0, 100) : defs.modAmount;
     target.modSense = Number.isFinite(src.modSense) ? clamp(src.modSense, 0, 100) : defs.modSense;
     target.modMotion = Number.isFinite(src.modMotion) ? clamp(src.modMotion, 0, 100) : defs.modMotion;
+    target.modCurve = Number.isFinite(rawCurve) ? clamp(rawCurve, 0, 100) : defs.modCurve;
     target.modInvert = typeof src.modInvert === "boolean" ? src.modInvert : defs.modInvert;
     return;
   }
@@ -777,6 +818,7 @@ function applyRoleModPatch(target, role, src) {
   target.modAmount = oldAmount === 40 ? defs.modAmount : oldAmount;
   target.modSense = defs.modSense;
   target.modMotion = defs.modMotion;
+  target.modCurve = defs.modCurve;
   target.modInvert = typeof src.modInvert === "boolean" ? src.modInvert : defs.modInvert;
 }
 
@@ -1034,6 +1076,7 @@ function serializeConfig(opts) {
       modAmount: roleModAmount(role),
       modSense: roleModSense(role),
       modMotion: roleModMotion(role),
+      modCurve: roleModCurve(role),
       modInvert: roleModInvert(role),
       vals: Object.assign({}, r.vals || {}),
       spans: Object.assign({}, r.spans || {}),
@@ -1065,7 +1108,7 @@ function serializeConfig(opts) {
     },
     active: ROLE_IDS.reduce((acc, role) => {
       const r = roles[role];
-      acc[role] = { on: r.on, inst: r.inst, param: r.param, modSmooth: r.modSmooth, modAmount: r.modAmount, modSense: r.modSense, modMotion: r.modMotion, modInvert: r.modInvert };
+      acc[role] = { on: r.on, inst: r.inst, param: r.param, modSmooth: r.modSmooth, modAmount: r.modAmount, modSense: r.modSense, modMotion: r.modMotion, modCurve: r.modCurve, modInvert: r.modInvert };
       return acc;
     }, {}),
     roles,
@@ -1100,6 +1143,7 @@ function writeLocalConfig(full) {
         modAmount: r.modAmount,
         modSense: r.modSense,
         modMotion: r.modMotion,
+        modCurve: r.modCurve,
         modInvert: r.modInvert,
         vals: r.vals,
         spans: r.spans,
@@ -1490,15 +1534,16 @@ function isResetDefault(kind, id) {
     const spec = P_SPEC[id];
     return !!(spec && valuesNear(P[id], spec.def, spec.max - spec.min));
   }
-  if (kind === "quant" && id === "level") {
-    const def = window.Quantizer ? Quantizer.sanitize({}).level : 70;
-    return valuesNear(G.quant.level, def, 100);
+  if (kind === "quant" && (id === "level" || id === "curve")) {
+    const def = window.Quantizer ? Quantizer.sanitize({})[id] : (id === "level" ? 70 : 0);
+    return valuesNear(G.quant[id], def, 100);
   }
   if (kind === "mod") {
     if (id === "modSmooth") return Math.abs(roleModSmooth(role) - roleModDef(role, "modSmooth")) < 0.05;
     if (id === "modAmount") return roleModAmount(role) === roleModDef(role, "modAmount");
     if (id === "modSense") return roleModSense(role) === roleModDef(role, "modSense");
     if (id === "modMotion") return roleModMotion(role) === roleModDef(role, "modMotion");
+    if (id === "modCurve") return roleModCurve(role) === roleModDef(role, "modCurve");
   }
   if (kind === "inst") {
     const spec = paramSpec(routing[role].inst, id);
@@ -1520,8 +1565,8 @@ function syncResetButton(btn) {
 
 function resetParam(kind, id) {
   const role = uiRole;
-  if (kind === "quant" && id === "level" && window.Quantizer) {
-    qzApply({ level: Quantizer.sanitize({}).level });
+  if (kind === "quant" && (id === "level" || id === "curve") && window.Quantizer) {
+    qzApply({ [id]: Quantizer.sanitize({})[id] });
     renderQuantPanel();
     return;
   }
@@ -1544,8 +1589,12 @@ function resetParam(kind, id) {
     if (id === "modAmount") routing[role].modAmount = roleModDef(role, "modAmount");
     if (id === "modSense") routing[role].modSense = roleModDef(role, "modSense");
     if (id === "modMotion") routing[role].modMotion = roleModDef(role, "modMotion");
+    if (id === "modCurve") routing[role].modCurve = roleModDef(role, "modCurve");
     persistConfig();
-    applyLinkedControl(role, smoothedT01[role] ?? roleLinkT01(role), true);
+    const t = roleLinkT01(role);
+    slowT01[role] = t;
+    smoothedT01[role] = t;
+    applyLinkedControl(role, t, true);
     renderRolePanel();
     return;
   }
@@ -1761,6 +1810,8 @@ function roleUsesInst(instId) {
 let settingsOpen = false;
 let filesOpen = false;
 let aboutOpen = false;
+var graphSheetRaf = 0;
+var GRAPH_SHEET_OVERLAP = 16;
 
 function subPanelOpen() {
   return filesOpen || aboutOpen;
@@ -1800,6 +1851,10 @@ function resetPanelScroll() {
 
 function updatePanels() {
   const scrollToTop = resetPanelScroll();
+  const wasOpen = document.body.classList.contains("settings-open");
+  // À la fermeture, on fige la hauteur : sinon le panneau s'allonge et la courbe saute.
+  if (wasOpen && !settingsOpen) holdSheetHeightForClose();
+  else if (settingsOpen) releaseSheetHeightHold();
   // Sur mobile, la courbe se resserre au-dessus du panneau : la vue suit la nouvelle hauteur.
   requestGraphRedraw();
   setPanelChrome("settingsPanel", "settingsToggle", settingsOpen);
@@ -1854,6 +1909,7 @@ function updatePanels() {
     if (body) body.scrollTop = 0;
   }
   rememberRoleSheetHeight();
+  trackGraphSheet();
 }
 
 // Le bouton Réglages ouvre les paramètres (volume, BPM) ; une pastille ouvre l'instrument.
@@ -2019,17 +2075,28 @@ function tzPoints(role) {
   return [0, th[0], th[1], th[2]];
 }
 
+function curveSliderHtml(value, attrs) {
+  const v = Math.round(value || 0);
+  return `<div class="curve-side" style="--f:${v}%">` +
+    `<span class="curve-gauge" aria-hidden="true"></span>` +
+    `<input type="range" class="curve-range" min="0" max="100" step="1" value="${v}" aria-label="Courbe" title="Courbe ${v} %" ${attrs}>` +
+    `</div>`;
+}
+
 function tierHtml(role) {
   const r = routing[role];
   const tu = roleTierUnits(role);
   if (!tu) return `<p class="gs-empty">Aucun paramètre lié. Cochez un paramètre de l’instrument.</p>`;
   const { spec, u } = tu;
   const th = (r.tiers || sanitizeTiers()).thresholds;
+  const v0 = roleCurvedVar(role);
+  const live0 = paramToUnit(spec, roleParamValue(role, spec.id, roleFilteredT01(role)));
   let html = `<div class="qz tz" id="tz" data-role="${role}" style="--t0:${th[0]};--t1:${th[1]};--t2:${th[2]};` +
-    u.map((x, i) => `--u${i}:${x.toFixed(4)}`).join(";") + `;--v:0;--live:${u[0].toFixed(4)}">`;
+    u.map((x, i) => `--u${i}:${x.toFixed(4)}`).join(";") + `;--v:${v0.toFixed(4)};--live:${live0.toFixed(4)}">`;
+  html += `<div class="tz-plot">`;
   html += `<div class="tz-stage" id="tzStage">`;
   html += `<svg class="tz-curve" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">` +
-    `<polygon class="tz-area" id="tzArea" points=""/><polyline class="tz-line" id="tzLine" points=""/></svg>`;
+    `<polygon class="tz-area" id="tzArea" points=""/><polyline class="tz-sense" id="tzSense" points=""/><polyline class="tz-line" id="tzLine" points=""/></svg>`;
   for (let i = 0; i < 3; i++) {
     html += `<div class="tz-th" data-i="${i}" role="slider" tabindex="0" aria-label="Trait ${i + 1}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(th[i] * 100)}"><span></span></div>`;
   }
@@ -2038,7 +2105,8 @@ function tierHtml(role) {
   }
   html += `<div class="tz-live"></div><div class="tz-needle"><span></span></div>`;
   html += `</div>`;
-  html += `</div>`;
+  html += curveSliderHtml(roleModCurve(role), `data-role-mod="modCurve"`);
+  html += `</div></div>`;
   return html;
 }
 
@@ -2056,8 +2124,10 @@ function tzPaintCurve() {
   pts.push(`100,${(100 - tu.u[3] * 100).toFixed(2)}`);
   const line = tz.root.querySelector("#tzLine");
   const area = tz.root.querySelector("#tzArea");
+  const sense = tz.root.querySelector("#tzSense");
   if (line) line.setAttribute("points", pts.join(" "));
   if (area) area.setAttribute("points", "0,100 " + pts.join(" ") + " 100,100");
+  if (sense) sense.setAttribute("points", signalCurvePoints(roleModCurve(tz.role)));
 }
 
 function tzFrame(now) {
@@ -2070,19 +2140,20 @@ function tzFrame(now) {
   const role = tz.role;
   const tu = roleTierUnits(role);
   if (tu) {
+    const v = roleCurvedVar(role);
     const live = roleParamValue(role, tu.spec.id, roleFilteredT01(role));
     const st = tz.root.style;
-    st.setProperty("--v", trackVar.toFixed(4));
+    st.setProperty("--v", v.toFixed(4));
     st.setProperty("--live", paramToUnit(tu.spec, live).toFixed(4));
     const cursor = $("sheetCursor");
     if (cursor && cursor.closest("[data-role]")?.dataset.role === role) {
-      cursor.style.setProperty("--v", trackVar.toFixed(4));
+      cursor.style.setProperty("--v", v.toFixed(4));
       cursor.style.setProperty("--live", paramToUnit(tu.spec, live).toFixed(4));
     }
     if (now - (tz.textAt || 0) > 90) {
       tz.textAt = now;
       if (tz.valEl) tz.valEl.textContent = formatInstParam(tu.spec, live);
-      if (tz.tierEl) tz.tierEl.textContent = "Agitation " + Math.round(trackVar * 100) + " %";
+      if (tz.tierEl) tz.tierEl.textContent = "Agitation " + Math.round(v * 100) + " %";
       tz.root.classList.toggle("is-rest", !routing[role].on);
     }
   }
@@ -2390,15 +2461,18 @@ function renderRolePanel() {
       if (key === "modAmount") routing[role].modAmount = clamp(val, 0, 100);
       if (key === "modSense") routing[role].modSense = clamp(val, 0, 100);
       if (key === "modMotion") routing[role].modMotion = clamp(val, 0, 100);
+      if (key === "modCurve") routing[role].modCurve = clamp(val, 0, 100);
       const valEl = input.closest(".param-row")?.querySelector(".param-val");
       if (valEl) valEl.textContent = formatParamVal(key, routing[role][key]);
+      if (key === "modCurve") input.title = "Courbe " + formatParamVal(key, routing[role][key]);
       saveRouting();
-      if (key === "modAmount" || key === "modSense" || key === "modMotion") {
+      if (key === "modAmount" || key === "modSense" || key === "modMotion" || key === "modCurve") {
         const t = roleLinkT01(role);
         slowT01[role] = t;
         smoothedT01[role] = t;
         applyLinkedControl(role, t, true);
       }
+      if (key === "modCurve") tzPaintCurve();
       syncResetButton(input.closest(".param-row")?.querySelector(".param-reset"));
       syncSensorLinkUi();
     });
@@ -3369,9 +3443,9 @@ function roleActivityT01(role) {
   return clamp(0.2 + 0.8 * alive, 0, 1);
 }
 
-// L'agitation amplifiée pilote directement le paramètre lié, en continu.
+// L'agitation amplifiée et courbée pilote directement le paramètre lié, en continu.
 function roleLinkT01(role) {
-  return trackVar;
+  return roleCurvedVar(role);
 }
 
 function roleFilteredT01(role) {
@@ -3498,9 +3572,6 @@ function updateRoleFilters(dt) {
     smoothedT01[role] = clamp(slowT01[role], 0, 1);
   }
 }
-
-let quantVar = 0;
-let trackVar = 0;
 
 function updateAgitation(dt) {
   // Monte vite (le geste s'entend tout de suite), redescend plus doucement.
@@ -4856,6 +4927,8 @@ function renderQuantPanel() {
   const q = G.quant;
   const labels = Quantizer.LABELS[qzMode()];
   const th = q.thresholds;
+  const curve = Math.round(q.curve || 0);
+  const v0 = quantCurvedVar();
   let html = `<section class="qz role-panel" id="qz" data-role="quant">`;
   html += `<div class="inst-row track-head">`;
   html += instOpenHtml(Quantizer.TIMBRES[q.timbre].label, qzSoundSummary(), true, "qzSoundOpen", "quant");
@@ -4869,11 +4942,12 @@ function renderQuantPanel() {
   html += `<span class="sensor-ratio"><span id="qzBpm">${P.bpm}</span> BPM · <span id="qzNote">—</span></span></div>`;
   const u = qzLevelUnits();
   html += `<div class="tz qz-tz" data-role="quant">`;
+  html += `<div class="tz-plot">`;
   html += `<div class="tz-stage" id="qzMeter" style="--t0:${th[0]};--t1:${th[1]};--t2:${th[2]};` +
-    u.map((x, i) => `--u${i}:${x.toFixed(4)}`).join(";") + `;--v:0;--live:${u[Quantizer.level] ?? 0}">`;
+    u.map((x, i) => `--u${i}:${x.toFixed(4)}`).join(";") + `;--v:${v0.toFixed(4)};--live:${u[Quantizer.level] ?? 0}">`;
   html += `<div class="qz-grid" id="qzGrid" aria-hidden="true"></div>`;
   html += `<svg class="tz-curve" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">` +
-    `<polygon class="tz-area" id="qzArea" points=""/><polyline class="tz-line" id="qzLine" points=""/></svg>`;
+    `<polygon class="tz-area" id="qzArea" points=""/><polyline class="tz-sense" id="qzSense" points=""/><polyline class="tz-line" id="qzLine" points=""/></svg>`;
   for (let i = 0; i < 3; i++) {
     html += `<div class="tz-th" data-i="${i}" role="slider" tabindex="0" aria-label="Seuil ${labels[i + 1]}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(th[i] * 100)}"><span></span></div>`;
   }
@@ -4882,7 +4956,8 @@ function renderQuantPanel() {
   }
   html += `<div class="tz-live"></div><div class="tz-needle"><span></span></div>`;
   html += `</div>`;
-  html += `</div>`;
+  html += curveSliderHtml(curve, `id="qzCurve"`);
+  html += `</div></div>`;
   html += `</div></section>`;
   panel.innerHTML = html;
   bindQuantPanel(panel);
@@ -4917,6 +4992,7 @@ function qzPaintCurve() {
   }
   stage.querySelector("#qzLine")?.setAttribute("points", pts.join(" "));
   stage.querySelector("#qzArea")?.setAttribute("points", "0,100 " + pts.join(" ") + " 100,100");
+  stage.querySelector("#qzSense")?.setAttribute("points", signalCurvePoints(G.quant && G.quant.curve));
 }
 
 // Contenu du bottom sheet du quantizer : le son.
@@ -4928,7 +5004,7 @@ function sheetCursorHtml(v, live) {
 function sheetPreviewHtml(role) {
   if (role === "quant") {
     const labels = Quantizer.LABELS[qzMode()];
-    const v = (typeof quantVar === "number" ? quantVar : 0).toFixed(4);
+    const v = quantCurvedVar().toFixed(4);
     return `<div class="sheet-preview role-settings" data-role="quant">` +
       `<div class="sensor-readout"><span class="sensor-live" id="sheetQzSub">${labels[Quantizer.level] || labels[0]}</span></div>` +
       sheetCursorHtml(v, "0.5") +
@@ -4939,8 +5015,15 @@ function sheetPreviewHtml(role) {
   const live = tu ? paramToUnit(tu.spec, roleParamValue(role, tu.spec.id, roleFilteredT01(role))) : 0.5;
   return `<div class="sheet-preview role-settings" data-role="${role}">` +
     `<div class="sensor-readout"><span class="sensor-live" id="sheetSensorLive">${formatUs(last)}</span></div>` +
-    sheetCursorHtml((typeof trackVar === "number" ? trackVar : 0).toFixed(4), live.toFixed(4)) +
+    sheetCursorHtml(roleCurvedVar(role).toFixed(4), live.toFixed(4)) +
     `<span class="sensor-ratio" id="sheetSensorRatio">${formatRoleRatio(role)}</span></div>`;
+}
+
+function timbreSelectHtml(selected) {
+  const options = Object.keys(Quantizer.TIMBRES).map((id) => {
+    return `<option value="${id}"${id === selected ? " selected" : ""}>${Quantizer.TIMBRES[id].label}</option>`;
+  }).join("");
+  return `<select class="inst-select" id="qzTimbre" aria-label="Instrument">${options}</select>`;
 }
 
 function quantSheetHtml() {
@@ -4948,9 +5031,14 @@ function quantSheetHtml() {
   const labels = Quantizer.LABELS[qzMode()];
   let html = `<div class="qz">`;
   html += sheetPreviewHtml("quant");
-  html += `<button type="button" class="pick-open" id="qzPickOpen">` +
-    `<span class="pick-open-label">Instrument</span><span class="pick-open-name">${Quantizer.TIMBRES[q.timbre].label}</span>` +
-    `<svg class="inst-open-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>`;
+  if (isMobileSheet()) {
+    html += `<button type="button" class="pick-open" id="qzPickOpen">` +
+      `<span class="pick-open-label">Instrument</span><span class="pick-open-name">${Quantizer.TIMBRES[q.timbre].label}</span>` +
+      `<svg class="inst-open-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>`;
+  } else {
+    html += `<div class="pick-open inst-pick">` +
+      `<span class="pick-open-label">Instrument</span>${timbreSelectHtml(q.timbre)}</div>`;
+  }
   html += `<div class="qz-pair sheet-card">`;
   html += `<div class="qz-block"><div class="qz-label"><span>Octave</span></div>`;
   html += qzSegHtml("qzOctave", [-2, -1, 0, 1, 2].map((v) => ({ v, l: v > 0 ? "+" + v : v === 0 ? "0" : "−" + -v })), q.octave) + `</div>`;
@@ -4997,33 +5085,56 @@ function qzApply(patch, rerender) {
     if (sub) sub.textContent = qzSoundSummary();
     const pickName = document.querySelector("#qzPickOpen .pick-open-name");
     if (pickName) pickName.textContent = Quantizer.TIMBRES[G.quant.timbre].label;
+    const timbreSel = document.querySelector("select#qzTimbre");
+    if (timbreSel && timbreSel.value !== G.quant.timbre) timbreSel.value = G.quant.timbre;
     const sheetInst = $("sheetInst");
     if (sheetInst && sheetKind === "quant") sheetInst.textContent = Quantizer.TIMBRES[G.quant.timbre].label;
   }
 }
 
 function syncQuantLevelSlider() {
+  if (!G.quant) return;
   const level = $("qzLevel");
-  if (!level || !G.quant) return;
-  if (document.activeElement === level) return;
-  level.value = String(Math.round(G.quant.level));
-  paintRange(level);
-  const val = level.closest(".param-row")?.querySelector(".param-val");
-  if (val) val.textContent = Math.round(G.quant.level) + " %";
-  syncResetButton(level.closest(".param-row")?.querySelector(".param-reset"));
+  if (level && document.activeElement !== level) {
+    level.value = String(Math.round(G.quant.level));
+    paintRange(level);
+    const val = level.closest(".param-row")?.querySelector(".param-val");
+    if (val) val.textContent = Math.round(G.quant.level) + " %";
+    syncResetButton(level.closest(".param-row")?.querySelector(".param-reset"));
+  }
+  const curve = $("qzCurve");
+  if (curve && document.activeElement !== curve) {
+    const c = Math.round(G.quant.curve || 0);
+    curve.value = String(c);
+    paintRange(curve);
+    curve.title = "Courbe " + c + " %";
+  }
 }
 
 function bindQuantLevel() {
   const level = $("qzLevel");
-  if (!level || level.dataset.bound === "1") return;
-  level.addEventListener("input", () => {
-    const val = level.closest(".param-row")?.querySelector(".param-val");
-    if (val) val.textContent = level.value + " %";
-    paintRange(level);
-    qzApply({ level: Number(level.value) });
-    syncResetButton(level.closest(".param-row")?.querySelector(".param-reset"));
-  });
-  level.dataset.bound = "1";
+  if (level && level.dataset.bound !== "1") {
+    level.addEventListener("input", () => {
+      const val = level.closest(".param-row")?.querySelector(".param-val");
+      if (val) val.textContent = level.value + " %";
+      paintRange(level);
+      qzApply({ level: Number(level.value) });
+      syncResetButton(level.closest(".param-row")?.querySelector(".param-reset"));
+    });
+    level.dataset.bound = "1";
+  }
+  const curve = $("qzCurve");
+  if (curve && curve.dataset.bound !== "1") {
+    curve.addEventListener("input", () => {
+      curve.title = "Courbe " + curve.value + " %";
+      paintRange(curve);
+      qzApply({ curve: Number(curve.value) });
+      qzPaintCurve();
+      const meter = $("qzMeter");
+      if (meter) meter.style.setProperty("--v", quantCurvedVar().toFixed(4));
+    });
+    curve.dataset.bound = "1";
+  }
   syncQuantLevelSlider();
 }
 
@@ -5053,6 +5164,11 @@ function bindQuantPanel(panel) {
   panel.querySelector("#qzTernary")?.addEventListener("change", (e) => qzApply({ ternary: e.target.checked }, true));
   panel.querySelector("#qzDelay")?.addEventListener("change", (e) => qzApply({ delayOn: e.target.checked }, true));
   panel.querySelector("#qzPickOpen")?.addEventListener("click", () => openTimbrePicker());
+  panel.querySelector("#qzTimbre")?.addEventListener("change", (e) => {
+    const id = e.target.value;
+    if (!id || id === G.quant.timbre) return;
+    qzApply({ timbre: id });
+  });
   for (const [id, key] of [["qzDelayFb", "delayFb"], ["qzDelayMix", "delayMix"]]) {
     const el = panel.querySelector("#" + id);
     el?.addEventListener("input", () => {
@@ -5137,13 +5253,14 @@ function qzFrame() {
   qzRaf = 0;
   const panel = $("quantPanel");
   if (!panel || panel.hidden || !settingsOpen) return;
+  const v = quantCurvedVar();
   const meter = $("qzMeter");
   if (meter) {
-    meter.style.setProperty("--v", quantVar.toFixed(4));
+    meter.style.setProperty("--v", v.toFixed(4));
     meter.style.setProperty("--live", (qzLevelUnits()[Quantizer.level] ?? 0).toFixed(4));
   }
   const cursor = $("sheetCursor");
-  if (cursor) cursor.style.setProperty("--v", quantVar.toFixed(4));
+  if (cursor) cursor.style.setProperty("--v", v.toFixed(4));
   qzRaf = requestAnimationFrame(qzFrame);
 }
 
@@ -5225,7 +5342,7 @@ function setQuantOn(on) {
 if (window.Quantizer) {
   Quantizer.bind({
     getBpm: () => P.bpm,
-    getVariation: () => quantVar,
+    getVariation: () => quantCurvedVar(),
     // Sans impulsions, le quantizer se tait comme les pistes.
     getGate: () => signalGain,
     // VOL général × Niveau du quantizer ; 0,9 au réglage par défaut (VOL 50 %, Niveau 70 %).
@@ -5551,32 +5668,110 @@ function closeSheet() {
   setTimeout(() => { if (!sheetKind) sheet.hidden = true; }, 320);
 }
 
-// Glisser vers le bas pour fermer : le sheet suit le doigt, se referme au-delà d'un quart
-// de sa hauteur ou sur un geste vif, sinon revient en place.
+// Sur mobile, le curseur règle la hauteur. Un tap ferme.
+// Un glisser rapide vers le bas ferme, sans aller jusqu'en bas.
+const SHEET_H_COOKIE = "sheetH";
+var userSheetH = 0;
+
+function sheetHeightLimits() {
+  const view = window.innerHeight || 640;
+  return { min: Math.round(view * 0.32), max: Math.round(view * 0.76) };
+}
+
+function clampSheetHeight(px) {
+  const lim = sheetHeightLimits();
+  return Math.round(Math.max(lim.min, Math.min(lim.max, px)));
+}
+
+function applyUserSheetHeight(px, persist) {
+  const h = clampSheetHeight(px);
+  document.documentElement.style.setProperty("--user-sheet-h", h + "px");
+  document.body.classList.add("sheet-sized");
+  userSheetH = h;
+  if (persist) writeCookie(SHEET_H_COOKIE, String(h));
+  return h;
+}
+
+function loadUserSheetHeight() {
+  const n = Number(readCookie(SHEET_H_COOKIE));
+  if (Number.isFinite(n) && n >= 80) applyUserSheetHeight(n, false);
+}
+
+function sheetGrabResizes(el) {
+  return isMobileSheet() && (el.id === "settingsPanel" || el.id === "instSheet" || el.id === "pickSheet");
+}
+
 function bindSheetDrag(el, handles, onClose) {
   let drag = null;
   const start = (e) => {
     if (e.button != null && e.button > 0) return;
     if (e.target.closest("button, input, select")) return;
-    drag = { y0: e.clientY, t0: performance.now(), dy: 0, h: el.getBoundingClientRect().height, id: e.pointerId };
-    el.classList.add("is-dragging");
+    drag = {
+      y0: e.clientY,
+      t0: performance.now(),
+      dy: 0,
+      h: el.getBoundingClientRect().height,
+      id: e.pointerId,
+      mode: "",
+      v: 0,
+      lastY: e.clientY,
+      lastT: performance.now(),
+    };
+    if (!sheetGrabResizes(el)) {
+      el.classList.add("is-dragging");
+      if (el.id === "settingsPanel") trackGraphSheet();
+    }
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { /* */ }
   };
   const move = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     const dy = e.clientY - drag.y0;
+    if (sheetGrabResizes(el)) {
+      const now = performance.now();
+      drag.v = (e.clientY - drag.lastY) / Math.max(now - drag.lastT, 8);
+      drag.lastY = e.clientY;
+      drag.lastT = now;
+      if (!drag.mode) {
+        if (Math.abs(dy) < 10) return;
+        drag.mode = "resize";
+      }
+      drag.dy = dy;
+      el.classList.add("is-dragging");
+      applyUserSheetHeight(drag.h - dy, false);
+      trackGraphSheet();
+      return;
+    }
     // Vers le haut, il résiste : on sent le bord.
     drag.dy = dy > 0 ? dy : dy * 0.18;
     el.style.transform = `translateY(${drag.dy}px)`;
+    if (el.id === "settingsPanel") trackGraphSheet();
   };
   const end = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
-    const v = drag.dy / Math.max(performance.now() - drag.t0, 1);
-    const close = drag.dy > drag.h * 0.25 || (v > 0.6 && drag.dy > 24);
+    const mode = drag.mode;
+    const dy = drag.dy;
+    const h0 = drag.h;
+    const t0 = drag.t0;
+    const v = drag.v;
+    const cancel = e.type === "pointercancel";
     el.classList.remove("is-dragging");
     el.style.transform = "";
     drag = null;
+    if (sheetGrabResizes(el)) {
+      // Environ 0,8 px/ms vers le bas : un geste vif, pas un réglage.
+      const flick = v > 0.8 && dy > 24;
+      if (mode === "resize" && !cancel && flick) {
+        onClose();
+        applyUserSheetHeight(h0, false);
+      } else if (mode === "resize") applyUserSheetHeight(h0 - dy, true);
+      else if (!cancel) onClose();
+      trackGraphSheet();
+      return;
+    }
+    const speed = dy / Math.max(performance.now() - t0, 1);
+    const close = dy > h0 * 0.25 || (speed > 0.6 && dy > 24);
     if (close) onClose();
+    if (el.id === "settingsPanel") trackGraphSheet();
   };
   handles.forEach((h) => {
     if (!h) return;
@@ -5594,7 +5789,11 @@ function paintRange(input) {
   const max = Number(input.max) || 100;
   const v = Number(input.value);
   const f = max > min ? clamp((v - min) / (max - min), 0, 1) : 0;
-  input.style.setProperty("--f", (f * 100).toFixed(2) + "%");
+  const pct = (f * 100).toFixed(2) + "%";
+  input.style.setProperty("--f", pct);
+  if (input.classList.contains("curve-range")) {
+    input.closest(".curve-side")?.style.setProperty("--f", pct);
+  }
 }
 
 function paintRanges(root) {
@@ -5622,26 +5821,43 @@ document.addEventListener("input", (e) => {
     const input = e.target && e.target.closest ? e.target.closest('input[type="range"]') : null;
     if (!input || input.disabled || e.pointerType === "mouse") return;
     e.preventDefault();
-    st = { input, id: e.pointerId, x0: e.clientX, y0: e.clientY, v0: Number(input.value), w: input.getBoundingClientRect().width, axis: "" };
+    const box = input.getBoundingClientRect();
+    st = {
+      input,
+      id: e.pointerId,
+      x0: e.clientX,
+      y0: e.clientY,
+      v0: Number(input.value),
+      w: box.width,
+      h: box.height,
+      vertical: input.classList.contains("curve-range"),
+      axis: "",
+    };
   }, true);
   document.addEventListener("pointermove", (e) => {
     if (!st || e.pointerId !== st.id) return;
     const dx = e.clientX - st.x0;
     const dy = e.clientY - st.y0;
+    const drive = st.vertical ? "y" : "x";
     if (!st.axis) {
       if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
       st.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-      if (st.axis === "x") st.input.closest(".param-row")?.classList.add("is-dragging");
+      if (st.axis === drive) st.input.closest(".param-row, .curve-side")?.classList.add("is-dragging");
     }
-    if (st.axis !== "x") return;
+    if (st.axis !== drive) return;
     const min = Number(st.input.min) || 0;
     const max = Number(st.input.max) || 100;
-    setFrom(st.input, st.v0 + (dx / Math.max(st.w, 1)) * (max - min));
+    const span = max - min;
+    const delta = st.vertical
+      ? -(dy / Math.max(st.h, 1)) * span
+      : (dx / Math.max(st.w, 1)) * span;
+    setFrom(st.input, st.v0 + delta);
   }, true);
   const end = (e) => {
     if (!st || e.pointerId !== st.id) return;
-    st.input.closest(".param-row")?.classList.remove("is-dragging");
-    if (st.axis === "x") st.input.dispatchEvent(new Event("change", { bubbles: true }));
+    st.input.closest(".param-row, .curve-side")?.classList.remove("is-dragging");
+    const drive = st.vertical ? "y" : "x";
+    if (st.axis === drive) st.input.dispatchEvent(new Event("change", { bubbles: true }));
     st = null;
   };
   document.addEventListener("pointerup", end, true);
@@ -5691,6 +5907,86 @@ document.addEventListener("input", (e) => {
 placeTrackIcons();
 window.addEventListener("resize", placeTrackIcons);
 
+// Le graphe mobile suit le bord haut du panneau, y compris pendant l'animation et le glissement.
+function holdSheetHeightForClose() {
+  if (!isMobileSheet()) return;
+  const panel = $("settingsPanel");
+  if (!panel) return;
+  const h = panel.getBoundingClientRect().height;
+  if (h >= 80) panel.style.height = Math.round(h) + "px";
+}
+
+function releaseSheetHeightHold() {
+  const panel = $("settingsPanel");
+  if (panel && panel.style.height) panel.style.height = "";
+}
+
+function clearGraphSheetFit() {
+  const canvas = $("graph");
+  if (!canvas) return;
+  if (canvas.style.height) canvas.style.height = "";
+  if (canvas.style.bottom) canvas.style.bottom = "";
+}
+
+function syncGraphToSheet() {
+  const canvas = $("graph");
+  const panel = $("settingsPanel");
+  if (!canvas || !panel || !isMobileSheet() || measuringRoleSheet) return NaN;
+  const viewH = window.innerHeight;
+  const top = panel.getBoundingClientRect().top;
+  if (top + GRAPH_SHEET_OVERLAP >= viewH - 1) {
+    clearGraphSheetFit();
+    return top;
+  }
+  const minH = viewH * 0.24;
+  const h = Math.max(minH, Math.min(viewH, top + GRAPH_SHEET_OVERLAP));
+  canvas.style.bottom = "auto";
+  canvas.style.height = Math.round(h) + "px";
+  return top;
+}
+
+function trackGraphSheet() {
+  if (!isMobileSheet()) {
+    clearGraphSheetFit();
+    return;
+  }
+  if (graphSheetRaf) return;
+  let last = NaN;
+  let still = 0;
+  let sawMove = false;
+  const started = performance.now();
+  const step = () => {
+    if (!isMobileSheet()) {
+      clearGraphSheetFit();
+      graphSheetRaf = 0;
+      requestGraphRedraw();
+      return;
+    }
+    const top = syncGraphToSheet();
+    if (!Number.isFinite(top)) {
+      graphSheetRaf = 0;
+      return;
+    }
+    const dragging = !!document.querySelector(".settings-panel.is-dragging, .sheet.is-dragging");
+    const moved = Number.isFinite(last) && Math.abs(top - last) > 0.5;
+    if (moved) sawMove = true;
+    if (moved || dragging) {
+      try { drawGraph(); } catch (err) { dbgError("GRAPH", err); }
+    }
+    if (dragging || moved) still = 0;
+    else still += 1;
+    last = top;
+    // La transition CSS démarre au frame suivant : on attend de la voir bouger.
+    const waiting = !sawMove && performance.now() - started < 500;
+    if (dragging || waiting || still < 3) {
+      graphSheetRaf = requestAnimationFrame(step);
+      return;
+    }
+    graphSheetRaf = 0;
+  };
+  graphSheetRaf = requestAnimationFrame(step);
+}
+
 // Hauteur du panneau de piste, lue sans toucher à l'affichage : le graphe reste visible.
 var measuringRoleSheet = false;
 
@@ -5734,15 +6030,31 @@ function rememberRoleSheetHeight() {
   measuringRoleSheet = false;
 }
 (function trackSheetHeight() {
+  loadUserSheetHeight();
   const panel = $("settingsPanel");
   if (!panel || !window.ResizeObserver) return;
+  panel.addEventListener("transitionend", (e) => {
+    if (e.target !== panel || e.propertyName !== "transform") return;
+    if (!document.body.classList.contains("settings-open")) releaseSheetHeightHold();
+    trackGraphSheet();
+  });
   new ResizeObserver(() => {
+    if (document.querySelector(".settings-panel.is-dragging, .sheet.is-dragging")) {
+      trackGraphSheet();
+      return;
+    }
     rememberRoleSheetHeight();
-    requestGraphRedraw();
+    trackGraphSheet();
   }).observe(panel);
 })();
 // La barre du navigateur et le plein écran changent la hauteur visible : on remesure.
 window.addEventListener("resize", () => {
+  if (userSheetH) applyUserSheetHeight(userSheetH, false);
   rememberRoleSheetHeight();
+  trackGraphSheet();
+  requestGraphRedraw();
+});
+window.visualViewport?.addEventListener("resize", () => {
+  trackGraphSheet();
   requestGraphRedraw();
 });

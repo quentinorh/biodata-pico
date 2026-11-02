@@ -280,6 +280,7 @@
     scale: "penta-min",
     root: 9,
     level: 70,
+    curve: 0,
     octave: 0,
     // Les pistes Faust jouent en même temps. L'option pour les couper n'est plus proposée.
     withTracks: true,
@@ -302,6 +303,7 @@
     if (SCALES[src.scale]) out.scale = src.scale;
     if (Number.isFinite(src.root)) out.root = ((Math.round(src.root) % 12) + 12) % 12;
     if (Number.isFinite(src.level)) out.level = Math.max(0, Math.min(100, src.level));
+    if (Number.isFinite(src.curve)) out.curve = Math.max(0, Math.min(100, src.curve));
     if (Number.isFinite(src.octave)) out.octave = Math.max(-2, Math.min(2, Math.round(src.octave)));
     out.withTracks = true;
     if (typeof src.delayOn === "boolean") out.delayOn = src.delayOn;

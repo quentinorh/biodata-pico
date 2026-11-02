@@ -41,6 +41,7 @@ window.PLANTE_DEFAULT_CONFIG = {
       "scale": "hirajoshi",
       "root": 9,
       "level": 2,
+      "curve": 0,
       "octave": -2,
       "withTracks": true,
       "thresholds": [
@@ -62,6 +63,7 @@ window.PLANTE_DEFAULT_CONFIG = {
       "modAmount": 80,
       "modSense": 36,
       "modMotion": 50,
+      "modCurve": 0,
       "modInvert": false,
       "vals": {},
       "spans": {},
@@ -110,6 +112,7 @@ window.PLANTE_DEFAULT_CONFIG = {
       "modAmount": 85,
       "modSense": 100,
       "modMotion": 40,
+      "modCurve": 0,
       "modInvert": false,
       "vals": {
         "preamp": 0.75

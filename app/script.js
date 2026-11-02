@@ -5402,7 +5402,7 @@ function roleSheetHtml(role) {
   const t01 = smoothedT01[role] ?? roleLinkT01(role);
   let html = sheetPreviewHtml(role);
   if (isMobileSheet()) {
-    html += `<button type="button" class="pick-open role-panel" data-role="${role}" id="pickOpen">` +
+    html += `<button type="button" class="pick-open" id="pickOpen">` +
       `<span class="pick-open-label">Instrument</span><span class="pick-open-name">${INST[r.inst].label}</span>` +
       `<svg class="inst-open-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>`;
   } else {
